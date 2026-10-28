@@ -25,7 +25,22 @@ async function main() {
   await seedUsers();
 
   const app = express();
-  app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+  const allowedOrigins = [
+  'https://luinab-profiling-66p3.vercel.app',
+  'https://luinab-profiling-66p3-f597aejhg-beverlys-projects-fb926395.vercel.app',
+];
+
+app.use(cors({
+  origin(origin, callback) {
+    // Allow requests without an Origin header, such as server-to-server calls.
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error('Origin not allowed by CORS'));
+  },
+  credentials: true,
+}));
   app.use(express.json());
 
   app.get('/', (req, res) => res.json({ name: 'Barangay Luinab API', status: 'ok' }));
