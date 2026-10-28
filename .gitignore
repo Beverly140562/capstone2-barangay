@@ -1,0 +1,21 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+*.log
+*.pkl
+.DS_Store
+__pycache__/
+*.pyc
+
+# Node.js dependencies
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+ml-service/venv/
+.venv/
+supabase/.temp/
+ml-service/model.joblib
+ml-service/.server.pid
