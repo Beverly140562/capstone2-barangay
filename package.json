@@ -9,7 +9,7 @@
     "dev:backend": "npm --workspace backend run dev",
     "dev:frontend": "npm --workspace frontend run dev",
     "dev:ml": "cd ml-service && uvicorn app.main:app --reload --port 5001",
-    "build": "npm --workspace frontend run build"
+    "build": "npm run build --workspaces"
   },
   "dependencies": {
     "lucide-react": "^1.31.0"
