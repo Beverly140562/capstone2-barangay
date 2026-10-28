@@ -1,4 +1,9 @@
+
 const TOKEN_KEY = 'luinab_token';
+
+const API_BASE_URL = (
+  import.meta.env.VITE_API_URL || '/api'
+).replace(/\/+$/, '');
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
@@ -12,6 +17,7 @@ export function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+
 async function request(path, options = {}) {
   const token = getToken();
 
@@ -24,7 +30,11 @@ async function request(path, options = {}) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`/api${path}`, {
+  const normalizedPath = path.startsWith('/')
+  ? path
+  : `/${path}`;
+
+const res = await fetch(`${API_BASE_URL}${normalizedPath}`, {
     ...options,
     headers,
   });
