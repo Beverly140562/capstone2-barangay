@@ -79,7 +79,7 @@ export default function Layout({ children }) {
                   key={i.to}
                   to={i.to}
                   className={({ isActive }) =>
-                    `block mt-3 px-8 py-2.5 text-[18px] transition ${isActive ? 'bg-[#963041] font-bold text-[18px] text-white border-l-4 border-brand' : 'hover:bg-[#963041]'}`
+                    ` block mt-3 px-8 py-2.5 text-[18px] transition ${isActive ? 'bg-[#963041] font-bold text-[18px] text-white border-l-4 border-brand' : 'hover:bg-[#963041]'}`
                   }
                 >
                   {i.img}
