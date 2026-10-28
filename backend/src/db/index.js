@@ -26,9 +26,9 @@ let db = null;
  * Initialize Supabase PostgreSQL
  */
 async function initDb() {
-  if (!process.env.DATABASE_URL) {
+  if (!process.env.API_BASE_URL) {
     throw new Error(
-      'DATABASE_URL is missing. Add your Supabase PostgreSQL connection string to .env'
+      'API_BASE_URL is missing. Add your Supabase PostgreSQL connection string to .env'
     );
   }
 
@@ -36,7 +36,7 @@ async function initDb() {
 
   try {
     db = new Pool({
-      connectionString: process.env.DATABASE_URL,
+      connectionString: process.env.API_BASE_URL,
       max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
@@ -60,15 +60,15 @@ async function initDb() {
     console.error('Failed to connect to Supabase PostgreSQL.');
 
     // Show safe connection information
-    if (process.env.DATABASE_URL) {
+    if (process.env.API_BASE_URL) {
       try {
-        const url = new URL(process.env.DATABASE_URL);
+        const url = new URL(process.env.API_BASE_URL);
 
         console.error('Database host:', url.hostname);
         console.error('Database port:', url.port);
         console.error('Database:', url.pathname.replace('/', ''));
       } catch {
-        console.error('DATABASE_URL has an invalid format.');
+        console.error('API_BASE_URL has an invalid format.');
       }
     }
 
