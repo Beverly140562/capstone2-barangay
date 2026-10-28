@@ -41,7 +41,6 @@ app.use(cors({
   },
   credentials: true,
 }));
-  app.use(express.json());
 
   app.get('/', (req, res) => res.json({ name: 'Barangay Luinab API', status: 'ok' }));
   app.use('/auth', require('./routes/auth'));
