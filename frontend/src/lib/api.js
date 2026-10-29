@@ -1,8 +1,8 @@
+
 const TOKEN_KEY = 'luinab_token';
 
-// Local development can use /api through the Vite proxy.
-// Vercel must set VITE_API_URL to the Render backend URL,
-// without an /api suffix.
+// Local development uses the Vite proxy.
+// Vercel uses the Render backend through VITE_API_URL.
 const API_BASE_URL = (
   import.meta.env.VITE_API_URL || '/api'
 ).replace(/\/+$/, '');
@@ -45,10 +45,9 @@ async function request(path, options = {}) {
     }
   );
 
-  const contentType = res.headers.get('content-type') || '';
-  const isCsv = contentType.includes('text/csv');
+  const contentType =
+    res.headers.get('content-type') || '';
 
-  // Handle expired or invalid sessions.
   if (
     res.status === 401 &&
     normalizedPath !== '/auth/login'
@@ -66,7 +65,6 @@ async function request(path, options = {}) {
     throw error;
   }
 
-  // Handle HTTP errors, including non-JSON responses.
   if (!res.ok) {
     const errorText = await res.text();
     let message = `Request failed (${res.status}).`;
@@ -74,7 +72,10 @@ async function request(path, options = {}) {
     if (errorText.trim()) {
       try {
         const data = JSON.parse(errorText);
-        message = data?.error || data?.message || message;
+        message =
+          data?.error ||
+          data?.message ||
+          message;
       } catch {
         message = errorText.trim();
       }
@@ -90,12 +91,10 @@ async function request(path, options = {}) {
     throw error;
   }
 
-  // Return CSV as text.
-  if (isCsv) {
+  if (contentType.includes('text/csv')) {
     return res.text();
   }
 
-  // Safely handle empty and JSON responses.
   const responseText = await res.text();
 
   if (!responseText.trim()) {
