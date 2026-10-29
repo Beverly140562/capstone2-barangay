@@ -1,558 +1,112 @@
-const ML_URL =
-  process.env.ML_SERVICE_URL ||
-  'http://127.0.0.1:5001';
-
 const { query } = require('../db');
 
+const ML_SERVICE_URL = (
+  process.env.ML_SERVICE_URL ||
+  'http://127.0.0.1:5001'
+).replace(/\/+$/, '');
 
-/* =========================================================
-   PREPARE HOUSEHOLD DATA
-   ========================================================= */
-
-
-function toBoolean(value) {
-  if (typeof value === 'boolean') {
-    return value;
+async function predictHousehold(household) {
+  if (!household) {
+    throw new Error('Household data is required for prediction.');
   }
 
-  if (typeof value === 'number') {
-    return value === 1;
-  }
+  // Load the actual program rules from the database.
+  const programs = await query(`
+    SELECT
+      program_id,
+      program_name,
+      description,
+      eligibility_rules
+    FROM assistance_programs
+    WHERE is_active = TRUE
+    ORDER BY program_name
+  `);
 
-  if (value == null) {
-    return false;
-  }
-
-  return ['true', '1', 'yes', 'y'].includes(
-    String(value).trim().toLowerCase()
+  console.log('[ML] Household received:', Boolean(household.household_id));
+  console.log('[ML] Active programs loaded:', programs.length);
+  console.log(
+    '[ML] Programs with rules:',
+    programs.filter((p) => String(p.eligibility_rules || '').trim()).length
   );
-}
 
-function prepareHousehold(row = {}) {
-  return {
-    // Existing fields
-    monthly_income: Number(row.monthly_income) || 0,
-    family_number: Number(row.family_number) || 1,
-    age: Number(row.age) || 0,
-    length_residency: Number(row.length_residency) || 0,
+  // Send only the household fields needed by the current ML service.
+  const modelHousehold = {
+    monthly_income: Number(household.monthly_income ?? 0),
+    family_number: Number(household.family_number ?? 1),
+    age: Number(household.age ?? 0),
+    length_residency: Number(household.length_residency ?? 0),
 
-    sex: row.sex || 'male',
-    civil_status: row.civil_status || 'Single',
-    highest_education: row.highest_education || 'None',
-    occupation: row.occupation || 'None',
-    residence: row.residence || 'Owned',
-    disability_present: toBoolean(row.disability_present),
+    sex: household.sex ?? 'male',
+    civil_status: household.civil_status ?? 'Single',
+    highest_education: household.highest_education ?? 'None',
+    occupation: household.occupation ?? 'None',
+    residence: household.residence ?? 'Owned',
 
-    // New model fields
-    member_count:
-      row.member_count == null
-        ? null
-        : Number(row.member_count),
+    disability_present: household.disability_present ?? null,
+    four_ps_member: household.four_ps_member ?? null,
+    leading_illnesses: household.leading_illnesses ?? null,
 
-    family_size:
-      row.family_size == null
-        ? null
-        : Number(row.family_size),
-
-    head_education:
-      row.head_education || null,
-
+    // Explicit model fields are passed when available.
+    member_count: household.member_count ?? null,
+    family_size: household.family_size ?? household.family_number ?? null,
+    head_education: household.head_education ?? household.highest_education ?? null,
     all_members_explicitly_unemployed:
-      row.all_members_explicitly_unemployed == null
-        ? null
-        : toBoolean(row.all_members_explicitly_unemployed),
-
+      household.all_members_explicitly_unemployed ?? null,
     provisional_disability_indicator:
-      row.provisional_disability_indicator == null
-        ? null
-        : toBoolean(row.provisional_disability_indicator),
-
-    illness_indicator:
-      row.illness_indicator == null
-        ? null
-        : toBoolean(row.illness_indicator),
+      household.provisional_disability_indicator ?? null,
+    illness_indicator: household.illness_indicator ?? null,
   };
-}
 
-
-/* =========================================================
-   GET ASSISTANCE PROGRAMS
-   ========================================================= */
-
-async function getAssistancePrograms() {
-  try {
-    const rows = await query(`
-      SELECT
-        program_id,
-        program_name,
-        description,
-        eligibility_rules
-      FROM assistance_programs
-      ORDER BY program_name ASC
-    `);
-
-    return rows || [];
-
-  } catch (error) {
-    console.error(
-      'Failed to load assistance programs:',
-      error.message
-    );
-
-    return [];
-  }
-}
-
-
-/* =========================================================
-   RANDOM FOREST - SINGLE HOUSEHOLD
-   ========================================================= */
-
-async function predictHousehold(
-  row,
-  programs = null
-) {
-  const household =
-    prepareHousehold(row);
-
-  /*
-   * Load programs from the database when
-   * the caller does not provide them.
-   */
-  if (!Array.isArray(programs)) {
-    programs =
-      await getAssistancePrograms();
-  }
-
-  try {
-
-    console.log(
-      `Sending household to ML service: ${ML_URL}`
-    );
-
-    console.log(
-      `Sending ${programs.length} assistance program(s) to ML service.`
-    );
-
-    const response =
-      await fetch(
-        `${ML_URL}/predict`,
-        {
-          method: 'POST',
-
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-
-          body: JSON.stringify({
-            household,
-            programs,
-          }),
-
-          signal:
-            AbortSignal.timeout(8000),
-        }
-      );
-
-    const data =
-      await response.json();
-
-    if (!response.ok) {
-      throw new Error(
-        data.detail ||
-        `ML service responded ${response.status}`
-      );
-    }
-
-    console.log(
-      'Random Forest result:',
-      data
-    );
-
-    return data;
-
-  } catch (error) {
-
-    console.error(
-      'ML prediction error:',
-      error.message
-    );
-
-    console.warn(
-      'Using rule-based fallback.'
-    );
-
-    /*
-     * IMPORTANT:
-     *
-     * The fallback below only determines
-     * vulnerability.
-     *
-     * It does not hardcode assistance
-     * program names.
-     */
-    return {
-      ...ruleBasedFallback(household),
-
-      suggested_programs: [],
-    };
-  }
-}
-
-
-/* =========================================================
-   RANDOM FOREST - BATCH PREDICTION
-   ========================================================= */
-
-async function predictHouseholds(
-  rows = [],
-  programs = null
-) {
-  const households =
-    rows.map(
-      prepareHousehold
-    );
-
-  if (!Array.isArray(programs)) {
-    programs =
-      await getAssistancePrograms();
-  }
-
-  try {
-
-    console.log(
-      `Sending ${households.length} household(s) to ML service.`
-    );
-
-    console.log(
-      `Sending ${programs.length} assistance program(s) to ML service.`
-    );
-
-    const response =
-      await fetch(
-        `${ML_URL}/predict-batch`,
-        {
-          method: 'POST',
-
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-
-          body: JSON.stringify({
-            households,
-            programs,
-          }),
-
-          signal:
-            AbortSignal.timeout(15000),
-        }
-      );
-
-    const data =
-      await response.json();
-
-    if (!response.ok) {
-  console.error(
-    'ML validation/API error:',
-    JSON.stringify(data, null, 2)
-  );
-
-  throw new Error(
-    typeof data.detail === 'string'
-      ? data.detail
-      : JSON.stringify(data.detail || data)
-  );
-}
-
-    return data;
-
-  } catch (error) {
-
-    console.error(
-      'ML batch prediction error:',
-      error.message
-    );
-
-    return {
-      results:
-        households.map(
-          ruleBasedFallback
-        ),
-    };
-  }
-}
-
-
-/* =========================================================
-   RULE-BASED FALLBACK
-   ========================================================= */
-
-function ruleBasedFallback(f) {
-
-  let score = 0;
-
-
-  /* -------------------------------------------------------
-     INCOME
-     ------------------------------------------------------- */
-
-  if (f.monthly_income < 6000) {
-
-    score += 3;
-
-  } else if (f.monthly_income < 12000) {
-
-    score += 2;
-
-  } else if (f.monthly_income < 20000) {
-
-    score += 1;
-  }
-
-
-  /* -------------------------------------------------------
-     FAMILY SIZE
-     ------------------------------------------------------- */
-
-  if (f.family_number >= 6) {
-
-    score += 2;
-
-  } else if (f.family_number >= 4) {
-
-    score += 1;
-  }
-
-
-  /* -------------------------------------------------------
-     DISABILITY
-     ------------------------------------------------------- */
-
- 
-const disability =
-  toBoolean(f.disability_present);
-
-if (disability) {
-  score += 3;
-}
-
-
-
-  /* -------------------------------------------------------
-     AGE
-     ------------------------------------------------------- */
-
-  if (f.age >= 60) {
-    score += 2;
-  }
-
-
-  /* -------------------------------------------------------
-     OCCUPATION
-     ------------------------------------------------------- */
-
-  if (
-    String(f.occupation)
-      .trim()
-      .toLowerCase() === 'none' ||
-
-    String(f.occupation)
-      .trim()
-      .toLowerCase() === 'unemployed'
-  ) {
-
-    score += 2;
-  }
-
-
-  /* -------------------------------------------------------
-     EDUCATION
-     ------------------------------------------------------- */
-
-  const education =
-    String(
-      f.highest_education || ''
-    )
-      .trim()
-      .toLowerCase();
-
-  if (
-    education === 'none' ||
-    education === 'elementary'
-  ) {
-
-    score += 1;
-  }
-
-
-  /* -------------------------------------------------------
-     CLASSIFICATION
-     ------------------------------------------------------- */
-
-  let vulnerability;
-
-  if (score >= 6) {
-
-    vulnerability =
-      'Highly Vulnerable';
-
-  } else if (score >= 3) {
-
-    vulnerability =
-      'Moderately Vulnerable';
-
-  } else {
-
-    vulnerability =
-      'Low Vulnerable';
-  }
-
-
-  /* -------------------------------------------------------
-     FALLBACK CONFIDENCE
-     ------------------------------------------------------- */
-
-  const probability =
-    Math.min(
-      0.97,
-      0.50 + score * 0.07
-    );
-
-
-  const high =
-    vulnerability ===
-      'Highly Vulnerable'
-      ? probability
-      : 0;
-
-  const moderate =
-    vulnerability ===
-      'Moderately Vulnerable'
-      ? probability
-      : 0;
-
-  const low =
-    vulnerability ===
-      'Low Vulnerable'
-      ? probability
-      : 0;
-
-
-  return {
-
-    vulnerability,
-
-    vulnerability_prob:
-      Number(
-        probability.toFixed(4)
-      ),
-
-    probabilities: {
-
-      'Highly Vulnerable':
-        Number(
-          high.toFixed(4)
-        ),
-
-      'Moderately Vulnerable':
-        Number(
-          moderate.toFixed(4)
-        ),
-
-      'Low Vulnerable':
-        Number(
-          low.toFixed(4)
-        ),
-    },
-
-    suggested_programs: [],
-  };
-}
-
-
-/* =========================================================
-   CHECK ML SERVICE
-   ========================================================= */
-
-async function mlHealth() {
-
-  try {
-
-    const response =
-      await fetch(
-        `${ML_URL}/health`,
-        {
-          signal:
-            AbortSignal.timeout(3000),
-        }
-      );
-
-    return await response.json();
-
-  } catch (error) {
-
-    return {
-
-      status:
-        'unavailable',
-
-      model_loaded:
-        false,
-
-      error:
-        error.message,
-    };
-  }
-}
-
-
-/* =========================================================
-   RETRAIN MODEL
-   ========================================================= */
-
-async function retrainModel() {
-
-  const response =
-    await fetch(
-      `${ML_URL}/retrain`,
-      {
-        method: 'POST',
-
-        headers: {
-          'Content-Type':
-            'application/json',
-        },
-
-        signal:
-          AbortSignal.timeout(60000),
-      }
-    );
-
-  const data =
-    await response.json();
+  const response = await fetch(`${ML_SERVICE_URL}/predict`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      household: modelHousehold,
+      programs: programs.map((p) => ({
+        program_id: String(p.program_id),
+        program_name: p.program_name,
+        description: p.description ?? null,
+        eligibility_rules: p.eligibility_rules ?? null,
+      })),
+    }),
+  });
+
+  const responseText = await response.text();
 
   if (!response.ok) {
-
     throw new Error(
-      data.detail ||
-      `Retraining failed with status ${response.status}`
+      `ML service returned HTTP ${response.status}: ${responseText}`
     );
   }
 
-  return data;
+  let prediction;
+
+  try {
+    prediction = JSON.parse(responseText);
+  } catch {
+    throw new Error('ML service returned invalid JSON.');
+  }
+
+  if (!prediction || !prediction.vulnerability) {
+    throw new Error('ML response is missing the vulnerability prediction.');
+  }
+
+  // Do not silently replace ML failures with an empty suggestions list.
+  const suggestedPrograms = prediction.suggested_programs;
+
+  if (!Array.isArray(suggestedPrograms)) {
+    throw new Error(
+      'ML response suggested_programs must be an array.'
+    );
+  }
+
+  console.log('[ML] Predicted vulnerability:', prediction.vulnerability);
+  console.log('[ML] Suggested programs:', suggestedPrograms);
+
+  return {
+    ...prediction,
+    suggested_programs: suggestedPrograms,
+  };
 }
 
-
-/* =========================================================
-   EXPORT
-   ========================================================= */
-
-module.exports = {
-  predictHousehold,
-  predictHouseholds,
-  mlHealth,
-  retrainModel,
-  getAssistancePrograms,
-};
+module.exports = { predictHousehold };

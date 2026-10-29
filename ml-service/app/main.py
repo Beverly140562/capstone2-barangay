@@ -1058,10 +1058,10 @@ def get_relationship_chart(
 @app.post("/predict")
 def predict(request: PredictionRequest):
     try:
-        print("HOUSEHOLD:", request.household.model_dump())
+        print("[ML] Programs received:", len(request.programs))
         print(
-            "PROGRAMS:",
-            [p.program_name for p in request.programs]
+            "[ML] Program names:",
+            [p.program_name for p in request.programs],
         )
 
         result = predict_one(
@@ -1069,17 +1069,22 @@ def predict(request: PredictionRequest):
             request.programs,
         )
 
-        print("PREDICTION RESULT:", result)
+        print("[ML] Prediction:", result["vulnerability"])
+        print(
+            "[ML] Suggested programs:",
+            result["suggested_programs"],
+        )
+
         return result
 
-    except Exception as e:
+    except Exception as exc:
         import traceback
         traceback.print_exc()
 
         raise HTTPException(
             status_code=500,
-            detail=f"Prediction failed: {type(e).__name__}: {e}",
-        ) from e
+            detail=f"Prediction failed: {type(exc).__name__}: {exc}",
+        ) from exc
 
 
 
