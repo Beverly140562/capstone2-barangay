@@ -1,6 +1,5 @@
 ﻿require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
 const { initDb, query } = require('./db');
 const { hashPassword } = require('./lib/auth');
 
