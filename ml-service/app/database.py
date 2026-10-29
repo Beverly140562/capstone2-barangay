@@ -1,15 +1,24 @@
+
 import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("API_BASE_URL")
 
 
 def get_connection():
+    if not DATABASE_URL:
+        raise RuntimeError(
+            "Database connection is not configured. "
+            "Set DATABASE_URL in the ML service environment."
+        )
+
     return psycopg2.connect(
         DATABASE_URL,
-        cursor_factory=RealDictCursor
+        cursor_factory=RealDictCursor,
+        connect_timeout=10,
+        sslmode="require",
     )
 
 
