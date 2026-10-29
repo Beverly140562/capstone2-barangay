@@ -33,16 +33,16 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
 
 app.use(cors({
   origin(origin, callback) {
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.includes(origin.replace(/\/+$/, ''))) {
+    if (!origin || allowedOrigins.includes(origin.replace(/\/+$/, ''))) {
       return callback(null, true);
     }
 
+    console.error(`CORS blocked origin: ${origin}`);
     return callback(new Error('Origin not allowed by CORS'));
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
 }));
 
 app.use(express.json());
