@@ -26,8 +26,8 @@ async function main() {
 
   const app = express();
   const allowedOrigins = [
-  'https://luinab-profiling-66p3.vercel.app',
-  'https://luinab-profiling-66p3-f597aejhg-beverlys-projects-fb926395.vercel.app',
+  'capstone2-barangay-j5ni.vercel.app',
+  'capstone2-barangay-j5ni-git-main-beverlys-projects-fb926395.vercel.app',
 ];
 
 app.use(cors({
