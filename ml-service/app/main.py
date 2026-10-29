@@ -50,8 +50,9 @@ app = FastAPI(
 # CORS
 # ============================================================
 
+
 VERCEL_ORIGINS = [
-    "capstone2-barangay-j5ni.vercel.app",
+    "https://capstone2-barangay-j5ni.vercel.app",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
@@ -64,6 +65,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # ============================================================
 # LOAD COLAB-TRAINED MODEL
 # ============================================================
@@ -71,64 +73,89 @@ app.add_middleware(
 _model = None
 _classes = []
 _feature_names = []
+_model_load_error = None
 
 
 def load_model():
-    global _model, _classes, _feature_names
+    global _model, _classes, _feature_names, _model_load_error
 
-    if not MODEL_PATH.exists():
-        raise RuntimeError(
-            f"Trained Colab model not found: {MODEL_PATH}"
-        )
+    try:
+        if not MODEL_PATH.is_file():
+            raise FileNotFoundError(
+                f"Model artifact does not exist: {MODEL_PATH}"
+            )
 
-    payload = load(MODEL_PATH)
+        payload = load(MODEL_PATH)
 
-    if not isinstance(payload, dict) or "model" not in payload:
-        raise RuntimeError(
-            "Invalid model artifact. Expected a dictionary "
-            "containing the trained pipeline under 'model'."
-        )
+        if not isinstance(payload, dict) or "model" not in payload:
+            raise RuntimeError(
+                "Invalid model artifact. Expected a dictionary "
+                "containing the trained pipeline under 'model'."
+            )
 
-    candidate_model = payload["model"]
-    candidate_features = payload.get("feature_names", [])
+        candidate_model = payload["model"]
+        candidate_features = list(payload.get("feature_names", []))
 
-    required_features = [
-        "member_count",
-        "head_education",
-        "household_monthly_income",
-        "family_size",
-        "all_members_explicitly_unemployed",
-        "provisional_disability_indicator",
-        "illness_indicator",
-    ]
+        required_features = [
+            "member_count",
+            "head_education",
+            "household_monthly_income",
+            "family_size",
+            "all_members_explicitly_unemployed",
+            "provisional_disability_indicator",
+            "illness_indicator",
+        ]
 
-    if candidate_features != required_features:
-        raise RuntimeError(
-            "Model feature names do not match the expected "
-            f"Colab features. Found: {candidate_features}"
-        )
+        if candidate_features != required_features:
+            raise RuntimeError(
+                "Model feature names do not match. "
+                f"Expected: {required_features}; "
+                f"Found: {candidate_features}"
+            )
 
-    if not hasattr(candidate_model, "predict_proba"):
-        raise RuntimeError(
-            "Loaded model does not support predict_proba()."
-        )
+        if not hasattr(candidate_model, "predict_proba"):
+            raise RuntimeError(
+                "Loaded model does not support predict_proba()."
+            )
 
-    _model = candidate_model
-    _classes = list(candidate_model.classes_)
-    _feature_names = candidate_features
+        if not hasattr(candidate_model, "classes_"):
+            raise RuntimeError(
+                "Loaded model does not expose classes_."
+            )
 
-    print("Colab-trained model loaded successfully.")
-    print("Model path:", MODEL_PATH)
-    print("Features:", _feature_names)
-    print("Classes:", _classes)
+        # Update globals only after validation succeeds.
+        _model = candidate_model
+        _classes = [str(value) for value in candidate_model.classes_]
+        _feature_names = candidate_features
+        _model_load_error = None
 
-    return True
+        print("Colab-trained model loaded successfully.")
+        print("Model path:", MODEL_PATH)
+        print("Features:", _feature_names)
+        print("Classes:", _classes)
+
+        return True
+
+    except Exception as exc:
+        _model = None
+        _classes = []
+        _feature_names = []
+        _model_load_error = f"{type(exc).__name__}: {exc}"
+
+        print("MODEL LOAD ERROR:", _model_load_error)
+        return False
 
 
 def ensure_model_loaded():
     if _model is None:
-        load_model()
+        if not load_model():
+            raise RuntimeError(
+                f"ML model is unavailable: {_model_load_error}"
+            )
 
+
+# Attempt to load the model when the application starts.
+load_model()
 
 # ============================================================
 # TRY LOADING MODEL WHEN SERVER STARTS
@@ -866,22 +893,17 @@ def root():
 # HEALTH
 # ============================================================
 
+
 @app.get("/health")
 def health():
-
     return {
-
-        "status":
-            "ok",
-
-        "model_loaded":
-            _model is not None,
-
-        "classes":
-            _classes,
-
-        "program_income_limit":
-            25000,
+        "status": "ok",
+        "model_loaded": _model is not None,
+        "classes": _classes,
+        "model_error": _model_load_error,
+        "model_path": str(MODEL_PATH),
+        "model_file_exists": MODEL_PATH.is_file(),
+        "program_income_limit": 25000,
     }
 
 
