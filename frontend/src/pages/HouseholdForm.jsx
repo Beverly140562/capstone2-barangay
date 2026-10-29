@@ -656,6 +656,28 @@ const deleteMember = async (item) => {
           : '';
 
 
+          // --------------------------------------------------------
+// CHECK FOR DUPLICATE HOUSEHOLD
+// --------------------------------------------------------
+
+
+const duplicateCheck = await api.post('/households/check-duplicate', {
+  surname: form.surname.trim(),
+  given_name: form.given_name.trim(),
+  middle_name: form.middle_name.trim(),
+  address: form.address.trim(),
+  purok: form.purok,
+  exclude_household_id: editId || null,
+});
+
+if (duplicateCheck?.duplicate) {
+  toast.error('This household has already been entered!', {
+    duration: 5000,
+  });
+  return;
+}
+
+
       // --------------------------------------------------------
       // DATABASE PAYLOAD
       // --------------------------------------------------------
@@ -905,7 +927,7 @@ const deleteMember = async (item) => {
           PAGE HEADER
       ====================================================== */}
 
-      <div className="mt-3">
+      <div className="mt-5 pt-5">
 
         <PageHeader
           title="Household & Residence Information"
@@ -972,7 +994,7 @@ const deleteMember = async (item) => {
                 onChange={set('blood_type')}
               >
                 <option value="">Select Blood Type</option>
-                {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Unknown'].map(
+                {['A', 'A+', 'A-', 'B', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'O', 'Unknown'].map(
                   (value) => (
                     <option key={value} value={value}>{value}</option>
                   )
@@ -1311,24 +1333,40 @@ const deleteMember = async (item) => {
                   None
                 </option>
 
-                <option value="Elementary">
-                  Elementary
+                <option value="Elementary Level">
+                  Elementary Level
                 </option>
 
-                <option value="High School">
-                  High School
+                <option value="Junior High Level">
+                  Junior High Level 
+                </option>
+
+                <option value="Senior High School Level">
+                  Senior High School Level
+                </option>
+
+                <option value="Senior High Graduate">
+                  Senior High Graduate
+                </option>
+
+                <option value="ALS">
+                  Alternative Learning System
                 </option>
 
                 <option value="Vocational">
                   Vocational
                 </option>
 
-                <option value="College">
-                  College
+                <option value="College Level">
+                  College Level
                 </option>
 
-                <option value="Post Graduate">
-                  Post Graduate
+                <option value="College Graduate">
+                  College Graduate
+                </option>
+
+                <option value="Master's Degree">
+                  Master's Degree
                 </option>
 
               </Select>
@@ -1587,14 +1625,49 @@ const deleteMember = async (item) => {
         value={member.education_attainment || ''}
         onChange={setM('education_attainment')}
       >
-        <option value="">Select education</option>
-        <option value="No Formal Education">No Formal Education</option>
-        <option value="Elementary">Elementary</option>
-        <option value="Junior High School">Junior High School</option>
-        <option value="Senior High School">Senior High School</option>
-        <option value="Vocational">Vocational</option>
-        <option value="College">College</option>
-        <option value="Postgraduate">Postgraduate</option>
+                <option value="">
+                  Select Education
+                </option>
+
+                <option value="None">
+                  None
+                </option>
+
+                <option value="Elementary Level">
+                  Elementary Level
+                </option>
+
+                <option value="Junior High Level">
+                  Junior High Level 
+                </option>
+
+                <option value="Senior High School Level">
+                  Senior High School Level
+                </option>
+
+                <option value="Senior High Graduate">
+                  Senior High Graduate
+                </option>
+
+                <option value="ALS">
+                  Alternative Learning System
+                </option>
+
+                <option value="Vocational">
+                  Vocational
+                </option>
+
+                <option value="College Level">
+                  College Level
+                </option>
+
+                <option value="College Graduate">
+                  College Graduate
+                </option>
+
+                <option value="Master's Degree">
+                  Master's Degree
+                </option>
       </select>
     </div>
 

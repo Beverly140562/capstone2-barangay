@@ -2763,7 +2763,7 @@ try {
 
       {/* PAGE HEADER */}
 
-      <div className="mt-5">
+      <div className="mt-5 ">
         <PageHeader
           title="Generate Reports"
           subtitle="Barangay reports."

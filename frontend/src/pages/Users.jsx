@@ -43,7 +43,8 @@ export default function Users() {
 
   return (
     <div className="space-y-6">
-      <div className='mt-4'><PageHeader title="User Accounts" subtitle="Create, view, update, and remove staff accounts." />
+      <div className='mt-4'>
+        <PageHeader title="User Accounts" subtitle="Create, view, update, and remove staff accounts." />
       </div>
 
       {error && <p className="text-red-600">{error}</p>}

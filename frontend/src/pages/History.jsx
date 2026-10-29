@@ -273,7 +273,7 @@ const getDecisionMaker = (program) => {
       {/* HEADER */}
       <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-black">
+          <h1 className="text-4xl font-bold text-black pt-5">
             History
           </h1>
 

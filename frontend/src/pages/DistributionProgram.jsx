@@ -860,7 +860,7 @@ function DistributionProgram() {
   const td = 'px-4 py-3 text-xl font-medium';
 
   return (
-    <div className="space-y-6 mt-5">
+    <div className="space-y-6 mt-5 ">
       <Toaster
         position="top-right"
         toastOptions={{ duration: 3000 }}

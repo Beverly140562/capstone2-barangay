@@ -158,7 +158,7 @@ const open = async (id) => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="mt-4">
+      <div className="mt-4 ">
         <PageHeader
           title={editMode ? 'Update Records' : 'Household'}
           subtitle={

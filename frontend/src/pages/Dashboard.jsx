@@ -833,10 +833,10 @@ export default function Dashboard() {
         : 0;
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 ">
 
         <h1 className="text-[32px] font-extrabold text-ink">
-          <span className="mt-4 block text-[25px] font-medium">
+          <span className="mt-5 pt-5 block text-[25px] font-medium ">
             Overview
           </span>
 
@@ -1015,7 +1015,7 @@ export default function Dashboard() {
     return (
       <div className="space-y-6">
 
-        <h1 className="text-[32px] font-extrabold text-ink">
+        <h1 className="text-[32px] font-extrabold text-ink pt-5">
           <span className="mt-4 block text-[25px] font-medium">
             Overview
           </span>
@@ -1257,7 +1257,7 @@ export default function Dashboard() {
     return (
       <div className="space-y-6">
 
-        <h1 className="pt-5 text-[32px] font-bold text-ink">
+        <h1 className="pt-5 mt-5 text-[32px] font-bold text-ink">
           Admin Dashboard
         </h1>
 

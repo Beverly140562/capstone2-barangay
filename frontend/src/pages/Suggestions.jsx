@@ -1200,7 +1200,7 @@ export default function Suggestions() {
 
       {/* HEADER */}
 
-      <div className="mt-5">
+      <div className="mt-5 ">
         <PageHeader
           title="Assistance Programs"
           subtitle="Socio-economic classification, household results, and recommendation status tracking."

@@ -29,7 +29,7 @@ export function Band({ title, subtitle, action, children, className = '' }) {
 
 export function PageHeader({ title, subtitle, children }) {
   return (
-    <div className="flex items-start justify-between mb-5">
+    <div className="flex items-start justify-between mb-5 pt-5">
       <div>
         <h1 className="text-[32px] font-extrabold text-ink">{title}</h1>
         {subtitle && <p className="mt-1 text-[20px] text-muted">{subtitle}</p>}

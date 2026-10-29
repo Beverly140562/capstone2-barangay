@@ -327,6 +327,65 @@ router.get('/', async (req, res) => {
   }
 });
 
+
+router.post('/check-duplicate', async (req, res) => {
+  try {
+    const {
+      surname,
+      given_name,
+      middle_name,
+      address,
+      purok,
+      exclude_household_id,
+    } = req.body;
+
+    if (!surname || !given_name || !address || !purok) {
+      return res.status(400).json({
+        error: 'Surname, given name, address, and Purok are required.',
+      });
+    }
+
+    const result = await query(
+      `
+      SELECT household_id
+      FROM households
+      WHERE LOWER(TRIM(COALESCE(surname, ''))) =
+            LOWER(TRIM($1))
+        AND LOWER(TRIM(COALESCE(given_name, ''))) =
+            LOWER(TRIM($2))
+        AND LOWER(TRIM(COALESCE(middle_name, ''))) =
+            LOWER(TRIM($3))
+        AND LOWER(TRIM(COALESCE(address, ''))) =
+            LOWER(TRIM($4))
+        AND LOWER(TRIM(COALESCE(purok, ''))) =
+            LOWER(TRIM($5))
+        AND (
+          $6::text IS NULL
+          OR household_id::text <> $6::text
+        )
+      LIMIT 1
+      `,
+      [
+        surname,
+        given_name,
+        middle_name || '',
+        address,
+        purok,
+        exclude_household_id || null,
+      ]
+    );
+
+    res.json({ duplicate: true });  // If duplicate exists
+res.json({ duplicate: false }); // If no duplicate exists
+  } catch (error) {
+    console.error('Duplicate household check failed:', error);
+
+    return res.status(500).json({
+      error: 'Unable to check for duplicate household.',
+    });
+  }
+});
+
 /*
 |--------------------------------------------------------------------------
 | GET SINGLE HOUSEHOLD AND MEMBERS
