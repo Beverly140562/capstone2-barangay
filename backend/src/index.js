@@ -27,7 +27,7 @@ async function main() {
   const app = express();
   
 const allowedOrigins = [
-  'capstone2-barangay-j5ni.vercel.app',
+  'https://capstone2-barangay-j5ni.vercel.app',
   
 ];
 
