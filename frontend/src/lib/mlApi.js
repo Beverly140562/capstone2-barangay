@@ -1,7 +1,15 @@
 
-const ML_API_URL = 'http://127.0.0.1:5001';
+const ML_API_URL = (
+  import.meta.env.VITE_ML_API_URL || ''
+).replace(/\/+$/, '');
 
 async function mlRequest(path, options = {}) {
+  if (!ML_API_URL) {
+    throw new Error(
+      'ML service URL is not configured. Set VITE_ML_API_URL in your frontend environment.'
+    );
+  }
+
   const response = await fetch(`${ML_API_URL}${path}`, {
     ...options,
     headers: {
@@ -10,9 +18,7 @@ async function mlRequest(path, options = {}) {
     },
   });
 
-  const contentType =
-    response.headers.get('content-type') || '';
-
+  const contentType = response.headers.get('content-type') || '';
   let data = null;
 
   if (contentType.includes('application/json')) {
@@ -37,10 +43,7 @@ async function mlRequest(path, options = {}) {
 function buildQueryString(query = '') {
   if (typeof query === 'string') {
     if (!query) return '';
-
-    return query.startsWith('?')
-      ? query
-      : `?${query}`;
+    return query.startsWith('?') ? query : `?${query}`;
   }
 
   const params = new URLSearchParams();
@@ -63,24 +66,19 @@ export const mlApi = {
   getAnalytics: (query = '') =>
     mlRequest(`/analytics${buildQueryString(query)}`),
 
-  
-predict: async (data) => {
-  console.log('ML PREDICTION REQUEST:', data);
+  predict: async (data) => {
+    console.log('ML PREDICTION REQUEST:', data);
 
-  const result = await mlRequest('/predict', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
+    const result = await mlRequest('/predict', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
 
-  console.log('ML PREDICTION RESPONSE:', result);
-  console.log(
-    'SUGGESTED PROGRAMS:',
-    result?.suggested_programs
-  );
+    console.log('ML PREDICTION RESPONSE:', result);
+    console.log('SUGGESTED PROGRAMS:', result?.suggested_programs);
 
-  return result;
-},
-
+    return result;
+  },
 
   predictBatch: (data) =>
     mlRequest('/predict-batch', {
