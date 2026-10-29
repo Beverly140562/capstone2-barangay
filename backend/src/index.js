@@ -32,18 +32,13 @@ const allowedOrigins = [
 ];
 
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-
-    // Reject this origin without throwing an Express error.
-    return callback(null, false);
-  },
+  origin: allowedOrigins,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   optionsSuccessStatus: 204,
 }));
+
+app.use(express.json());
 
 
   app.get('/', (req, res) => res.json({ name: 'Barangay Luinab API', status: 'ok' }));
