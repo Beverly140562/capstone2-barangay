@@ -50,12 +50,15 @@ app = FastAPI(
 # CORS
 # ============================================================
 
+VERCEL_ORIGINS = [
+    "https://capstone2-barangay-j5ni-oojmui41f-beverlys-projects-fb926395.vercel.app",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=VERCEL_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
