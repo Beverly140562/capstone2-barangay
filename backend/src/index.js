@@ -28,7 +28,7 @@ async function main() {
   
 const allowedOrigins = [
   'capstone2-barangay-j5ni.vercel.app',
-  'https://capstone2-barangay-j5ni-lq4l720kx-beverlys-projects-fb926395.vercel.app',
+  
 ];
 
 app.use(cors({
