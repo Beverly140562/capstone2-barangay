@@ -51,7 +51,7 @@ app = FastAPI(
 # ============================================================
 
 VERCEL_ORIGINS = [
-    "https://capstone2-barangay-j5ni-oojmui41f-beverlys-projects-fb926395.vercel.app",
+    "https://capstone2-barangay-j5ni.vercel.app",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
