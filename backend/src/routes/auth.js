@@ -73,7 +73,11 @@ router.get('/me', auth, async (req, res) => {
     // IMPORTANT:
     // signToken() stores the user ID as "users",
     // not "sub".
-    const userId = req.user.users;
+    const userId =
+  req.user?.users ??
+  req.user?.user_id ??
+  req.user?.id ??
+  req.user?.sub;
 
     if (!userId) {
       return res.status(401).json({
