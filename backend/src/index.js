@@ -33,7 +33,10 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
 
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin.replace(/\/+$/, ''))) {
+    if (
+      !origin ||
+      allowedOrigins.includes(origin.replace(/\/+$/, ''))
+    ) {
       return callback(null, true);
     }
 
