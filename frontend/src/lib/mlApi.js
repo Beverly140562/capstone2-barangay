@@ -1,7 +1,6 @@
-
 const ML_API_URL = (
   import.meta.env.VITE_ML_API_URL || ''
-).replace(/\/+$/, '');
+).trim().replace(/\/+$/, '');
 
 async function mlRequest(path, options = {}) {
   if (!ML_API_URL) {
@@ -18,26 +17,12 @@ async function mlRequest(path, options = {}) {
     },
   });
 
-  const contentType = response.headers.get('content-type') || '';
-  let data = null;
-
-  if (contentType.includes('application/json')) {
-    data = await response.json();
-  } else {
-    const text = await response.text();
-    data = text ? { message: text } : null;
-  }
-
   if (!response.ok) {
-    throw new Error(
-      data?.detail ||
-      data?.error ||
-      data?.message ||
-      `ML service request failed (${response.status}).`
-    );
+    const message = await response.text();
+    throw new Error(message || `ML request failed: ${response.status}`);
   }
 
-  return data;
+  return response.json();
 }
 
 function buildQueryString(query = '') {
