@@ -26,18 +26,27 @@ async function main() {
 
   const app = express();
   
-const allowedOrigins = [
-  'https://capstone2-barangay-j5ni.vercel.app',
-  'https://luinab-profiling-66p3.vercel.app',
-];
+const allowedOrigins = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map(origin => origin.trim().replace(/\/+$/, ''))
+  .filter(Boolean);
 
 app.use(cors({
-  origin: allowedOrigins,
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin.replace(/\/+$/, ''))) {
+      return callback(null, true);
+    }
+
+    return callback(new Error('Origin not allowed by CORS'));
+  },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
 app.use(express.json());
+
 
 
   app.get('/', (req, res) => res.json({ name: 'Barangay Luinab API', status: 'ok' }));
