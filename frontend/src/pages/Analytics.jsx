@@ -29,7 +29,12 @@ const COLORS = [
 ];
 
 
-const ML_API_URL = "http://127.0.0.1:5001";
+
+const ML_API_URL = (
+  import.meta.env.VITE_ML_API_URL ||
+  "http://127.0.0.1:5001"
+).replace(/\/+$/, "");
+
 
 function SeabornCharts() {
   const [dateRange, setDateRange] = useState("All Time");
