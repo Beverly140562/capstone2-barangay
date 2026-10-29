@@ -25,9 +25,10 @@ async function main() {
   await seedUsers();
 
   const app = express();
-  const allowedOrigins = [
-  'capstone2-barangay-j5ni.vercel.app',
-  'capstone2-barangay-j5ni-git-main-beverlys-projects-fb926395.vercel.app',
+  
+const allowedOrigins = [
+  'https://luinab-profiling-66p3.vercel.app',
+  'https://capstone2-barangay-j5ni-lq4l720kx-beverlys-projects-fb926395.vercel.app',
 ];
 
 app.use(cors({
@@ -37,10 +38,14 @@ app.use(cors({
       return callback(null, true);
     }
 
-    return callback(new Error('Origin not allowed by CORS'));
+    return callback(
+      new Error(`Origin not allowed by CORS: ${origin}`)
+    );
   },
-  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+
 
   app.get('/', (req, res) => res.json({ name: 'Barangay Luinab API', status: 'ok' }));
   app.use('/auth', require('./routes/auth'));
