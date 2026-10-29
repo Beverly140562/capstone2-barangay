@@ -51,7 +51,7 @@ app = FastAPI(
 # ============================================================
 
 VERCEL_ORIGINS = [
-    "https://capstone2-barangay-j5ni.vercel.app",
+    "capstone2-barangay-j5ni.vercel.app",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
@@ -159,8 +159,32 @@ class Program(BaseModel):
 
 
 
-class Household(BaseModel):
     # Existing system fields
+class Household(BaseModel):
+    monthly_income: float = 0
+    family_number: int = 1
+    age: int = 0
+    length_residency: int = 0
+
+    sex: str = "male"
+    civil_status: str = "Single"
+    highest_education: str = "None"
+    occupation: str = "None"
+    residence: str = "Owned"
+
+    # None means unknown; False means confirmed no disability.
+    disability_present: bool | None = None
+    four_ps_member: str | None = None
+    leading_illnesses: str | None = None
+
+    member_count: int | None = None
+    family_size: int | None = None
+    head_education: str | None = None
+
+    all_members_explicitly_unemployed: bool | None = None
+    provisional_disability_indicator: bool | None = None
+    illness_indicator: bool | None = None
+
     monthly_income: float = 0
     family_number: int = 1
     age: int = 0
@@ -609,303 +633,84 @@ def analytics(
 # PROGRAM MATCHING
 # ============================================================
 
+
 def match_programs(
     household: Household,
     vulnerability: str,
     programs: list[Program],
 ) -> list[str]:
-    """
-    Match a household with assistance programs.
-
-    IMPORTANT:
-    Households with monthly income of ₱25,000 or higher
-    are NOT eligible for any assistance program.
-
-    This rule is checked BEFORE all other program rules.
-    """
-
-    # ========================================================
-    # INCOME ELIGIBILITY CHECK
-    # ========================================================
-
-    if household.monthly_income >= 25000:
-
-        print(
-            "PROGRAM MATCHING: NOT ELIGIBLE"
-        )
-
-        print(
-            f"Income: ₱{household.monthly_income:,.2f}"
-        )
-
-        print(
-            "Reason: Monthly income is ₱25,000 or higher."
-        )
-
-        return []
-
-    # ========================================================
-    # INITIALIZE
-    # ========================================================
 
     matched = []
 
-    vulnerability_text = (
-        str(vulnerability)
-        .strip()
-        .lower()
+    income = float(household.monthly_income or 0)
+
+    family_size = (
+        household.family_size
+        if household.family_size is not None
+        else household.member_count
+        if household.member_count is not None
+        else household.family_number
     )
 
-    # ========================================================
-    # CHECK EACH PROGRAM
-    # ========================================================
+    vulnerability_text = str(
+        vulnerability or ""
+    ).strip().lower()
+
+    is_highly_vulnerable = vulnerability_text in {
+        "high",
+        "highly vulnerable",
+        "high vulnerability",
+    }
+
+    has_disability = (
+        household.disability_present is True
+        or household.provisional_disability_indicator is True
+    )
+
+    is_senior = int(household.age or 0) >= 60
 
     for program in programs:
+        name = str(program.program_name or "").strip().lower()
 
-        rules = (
-            program.eligibility_rules
-            or ""
-        ).strip().lower()
+        eligible = False
 
-        print(
-            f"PROGRAM CHECK: "
-            f"{program.program_name} | "
-            f"RULES: {rules} | "
-            f"VULNERABILITY: {vulnerability} | "
-            f"INCOME: {household.monthly_income} | "
-            f"AGE: {household.age} | "
-            f"FAMILY: {household.family_number} | "
-            f"DISABILITY: {household.disability_present}"
-        )
-
-        # No eligibility rules
-        if not rules:
-            continue
-
-        matched_program = False
-
-        # ====================================================
-        # 1. HIGHLY VULNERABLE
-        # ====================================================
-
-        if vulnerability_text == "highly vulnerable":
-
-            if (
-                "highly vulnerable" in rules
-                or "high vulnerability" in rules
-                or "high risk" in rules
-            ):
-                matched_program = True
-
-        # ====================================================
-        # 2. MODERATELY VULNERABLE
-        # ====================================================
-
-        if (
-            not matched_program
-            and vulnerability_text
-            == "moderately vulnerable"
-        ):
-
-            if (
-                "moderately vulnerable" in rules
-                or "moderate vulnerability" in rules
-                or "moderate risk" in rules
-            ):
-                matched_program = True
-
-        # ====================================================
-        # 3. LOW / NOT VULNERABLE
-        # ====================================================
-
-        if (
-            not matched_program
-            and vulnerability_text in (
-                "low vulnerable",
-                "low",
-                "not vulnerable",
+        if "4ps" in name or "pantawid" in name:
+            eligible = (
+                is_highly_vulnerable
+                and family_size >= 5
             )
-        ):
 
-            if (
-                "low vulnerable" in rules
-                or "low vulnerability" in rules
-                or "low risk" in rules
-                or "not vulnerable" in rules
-            ):
-                matched_program = True
-
-        # ====================================================
-        # 4. SENIOR CITIZEN
-        # ====================================================
-
-        if not matched_program:
-
-            if household.age >= 60:
-
-                if (
-                    "senior citizen" in rules
-                    or "senior citizens" in rules
-                    or "senior" in rules
-                    or "elderly" in rules
-                    or "age >= 60" in rules
-                    or "age 60" in rules
-                    or "60 years old" in rules
-                    or "60+" in rules
-                ):
-                    matched_program = True 
-
-        # ====================================================
-        # 5. PERSON WITH DISABILITY
-        # ====================================================
-
-        if not matched_program:
-
-            if has_disability(
-                household.disability_present
-            ):
-
-                if (
-                    "disabled member" in rules
-                    or "person with disability" in rules
-                    or "persons with disability" in rules
-                    or "disability" in rules
-                    or "pwd" in rules
-                ):
-                    matched_program = True
-
-        # ====================================================
-        # 6. FAMILY SIZE >= 6
-        # ====================================================
-
-        if not matched_program:
-
-            if household.family_number >= 6:
-
-                if (
-                    "family size >= 6" in rules
-                    or "family_number >= 6" in rules
-                    or "6 or more family members" in rules
-                    or "6 or more members" in rules
-                    or "large family" in rules
-                    or "large families" in rules
-                ):
-                    matched_program = True
-
-        # ====================================================
-        # 7. FAMILY SIZE >= 5
-        # ====================================================
-
-        if not matched_program:
-
-            if household.family_number >= 5:
-
-                if (
-                    "family size >= 5" in rules
-                    or "family_number >= 5" in rules
-                    or "5 or more family members" in rules
-                    or "5 or more members" in rules
-                ):
-                    matched_program = True
-
-        # ====================================================
-        # 8. INCOME <= 5000
-        # ====================================================
-
-        if not matched_program:
-
-            if household.monthly_income <= 5000:
-
-                if (
-                    "monthly_income <= 5000" in rules
-                    or "income <= 5000" in rules
-                    or "income below 5000" in rules
-                    or "income below ₱5000" in rules
-                    or "income up to 5000" in rules
-                    or "5000 or below" in rules
-                ):
-                    matched_program = True
-
-        # ====================================================
-        # 9. INCOME <= 8000
-        # ====================================================
-
-        if not matched_program:
-
-            if household.monthly_income <= 8000:
-
-                if (
-                    "monthly income below 8,000" in rules
-                    or "monthly income below 8000" in rules
-                    or "income below 8,000" in rules
-                    or "income below 8000" in rules
-                    or "income <= 8000" in rules
-                    or "monthly_income <= 8000" in rules
-                    or "8000 or below" in rules
-                ):
-                    matched_program = True
-
-        # ====================================================
-        # 10. INCOME <= 10000
-        # ====================================================
-
-        if not matched_program:
-
-            if household.monthly_income <= 10000:
-
-                if (
-                    "monthly_income <= 10000" in rules
-                    or "income <= 10000" in rules
-                    or "income below 10000" in rules
-                    or "income below ₱10000" in rules
-                    or "income up to 10000" in rules
-                    or "10000 or below" in rules
-                ):
-                    matched_program = True
-
-        # ====================================================
-        # 11. INCOME <= 12000
-        # ====================================================
-
-        if not matched_program:
-
-            if household.monthly_income <= 12000:
-
-                if (
-                    "monthly_income <= 12000" in rules
-                    or "income <= 12000" in rules
-                    or "income below 12000" in rules
-                    or "income below ₱12000" in rules
-                    or "income up to 12000" in rules
-                    or "12000 or below" in rules
-                ):
-                    matched_program = True
-
-        # ====================================================
-        # 12. LOW INCOME
-        # ====================================================
-
-        if not matched_program:
-
-            if household.monthly_income <= 12000:
-
-                if (
-                    "low income" in rules
-                    or "low-income" in rules
-                    or "low income household" in rules
-                    or "low income households" in rules
-                ):
-                    matched_program = True
-
-        # ====================================================
-        # ADD MATCHED PROGRAM
-        # ====================================================
-
-        if matched_program:
-
-            matched.append(
-                program.program_name
+        elif "aics" in name or "crisis" in name:
+            # Assumption: use ₱12,000 as the low-income
+            # threshold until the program's official threshold
+            # is confirmed.
+            eligible = (
+                is_highly_vulnerable
+                and income <= 12000
             )
+
+        elif "medical" in name:
+            eligible = has_disability or is_senior
+
+        elif "rice subsidy" in name:
+            eligible = income < 8000
+
+        print({
+            "program": program.program_name,
+            "income": income,
+            "family_size": family_size,
+            "vulnerability": vulnerability,
+            "disability_known": (
+                household.disability_present is not None
+            ),
+            "eligible_match": eligible,
+        })
+
+        if eligible:
+            matched.append(program.program_name)
+
+    print("PROGRAMS RECEIVED:", len(programs))
+    print("SUGGESTED PROGRAMS:", matched)
 
     return matched
 
@@ -1227,13 +1032,24 @@ def get_relationship_chart(
 # SINGLE PREDICTION
 # ============================================================
 
+
 @app.post("/predict")
 def predict(request: PredictionRequest):
     try:
-        return predict_one(
+        print("HOUSEHOLD:", request.household.model_dump())
+        print(
+            "PROGRAMS:",
+            [p.program_name for p in request.programs]
+        )
+
+        result = predict_one(
             request.household,
             request.programs,
         )
+
+        print("PREDICTION RESULT:", result)
+        return result
+
     except Exception as e:
         import traceback
         traceback.print_exc()
