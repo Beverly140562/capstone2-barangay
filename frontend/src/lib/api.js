@@ -38,12 +38,13 @@ async function request(path, options = {}) {
   }
 
   const res = await fetch(
-    `${API_BASE_URL}${normalizedPath}`,
-    {
-      ...options,
-      headers,
-    }
-  );
+  `${API_BASE_URL}${normalizedPath}`,
+  {
+    ...options,
+    cache: 'no-store',
+    headers,
+  }
+);
 
   const contentType =
     res.headers.get('content-type') || '';

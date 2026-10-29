@@ -328,6 +328,7 @@ router.get('/', async (req, res) => {
 });
 
 
+
 router.post('/check-duplicate', async (req, res) => {
   try {
     const {
@@ -337,9 +338,14 @@ router.post('/check-duplicate', async (req, res) => {
       address,
       purok,
       exclude_household_id,
-    } = req.body;
+    } = req.body || {};
 
-    if (!surname || !given_name || !address || !purok) {
+    if (
+      !String(surname || '').trim() ||
+      !String(given_name || '').trim() ||
+      !String(address || '').trim() ||
+      !String(purok || '').trim()
+    ) {
       return res.status(400).json({
         error: 'Surname, given name, address, and Purok are required.',
       });
@@ -347,36 +353,41 @@ router.post('/check-duplicate', async (req, res) => {
 
     const result = await query(
       `
-      SELECT household_id
-      FROM households
-      WHERE LOWER(TRIM(COALESCE(surname, ''))) =
-            LOWER(TRIM($1))
-        AND LOWER(TRIM(COALESCE(given_name, ''))) =
-            LOWER(TRIM($2))
-        AND LOWER(TRIM(COALESCE(middle_name, ''))) =
-            LOWER(TRIM($3))
-        AND LOWER(TRIM(COALESCE(address, ''))) =
-            LOWER(TRIM($4))
-        AND LOWER(TRIM(COALESCE(purok, ''))) =
-            LOWER(TRIM($5))
-        AND (
-          $6::text IS NULL
-          OR household_id::text <> $6::text
-        )
-      LIMIT 1
+        SELECT household_id
+        FROM households
+        WHERE LOWER(TRIM(COALESCE(surname, ''))) =
+              LOWER(TRIM($1))
+          AND LOWER(TRIM(COALESCE(given_name, ''))) =
+              LOWER(TRIM($2))
+          AND LOWER(TRIM(COALESCE(middle_name, ''))) =
+              LOWER(TRIM($3))
+          AND LOWER(TRIM(COALESCE(address, ''))) =
+              LOWER(TRIM($4))
+          AND LOWER(TRIM(COALESCE(purok, ''))) =
+              LOWER(TRIM($5))
+          AND (
+            $6::text IS NULL
+            OR household_id::text <> $6::text
+          )
+        LIMIT 1
       `,
       [
-        surname,
-        given_name,
-        middle_name || '',
-        address,
-        purok,
+        String(surname).trim(),
+        String(given_name).trim(),
+        String(middle_name || '').trim(),
+        String(address).trim(),
+        String(purok).trim(),
         exclude_household_id || null,
       ]
     );
 
-    res.json({ duplicate: true });  // If duplicate exists
-res.json({ duplicate: false }); // If no duplicate exists
+    // Return true only if a matching record was found.
+    return res.json({
+      duplicate: result.length > 0,
+      household_id: result.length > 0
+        ? result[0].household_id
+        : null,
+    });
   } catch (error) {
     console.error('Duplicate household check failed:', error);
 
@@ -385,6 +396,7 @@ res.json({ duplicate: false }); // If no duplicate exists
     });
   }
 });
+
 
 /*
 |--------------------------------------------------------------------------

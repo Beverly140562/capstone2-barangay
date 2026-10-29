@@ -6,6 +6,11 @@ const { auth } = require('../middleware/auth');
 
 router.use(auth);
 
+router.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+
 /*
 |--------------------------------------------------------------------------
 | GET CURRENT USER ID
