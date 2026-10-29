@@ -28,22 +28,21 @@ async function main() {
   
 const allowedOrigins = [
   'https://capstone2-barangay-j5ni.vercel.app',
-  
+  'https://luinab-profiling-66p3.vercel.app',
 ];
 
 app.use(cors({
-  origin(origin, callback) {
-    // Allow requests without an Origin header, such as server-to-server calls.
+  origin: function (origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
 
-    return callback(
-      new Error(`Origin not allowed by CORS: ${origin}`)
-    );
+    // Reject this origin without throwing an Express error.
+    return callback(null, false);
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 204,
 }));
 
 
