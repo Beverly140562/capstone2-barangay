@@ -1,5 +1,12 @@
 
 import os
+
+# Configure Matplotlib before importing modules that use it.
+os.environ["MPLCONFIGDIR"] = "/tmp/matplotlib"
+
+import matplotlib
+matplotlib.use("Agg")
+
 import sys
 import io
 from pathlib import Path
@@ -12,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from joblib import load
 from pydantic import BaseModel, Field
+
 
 load_dotenv()
 
