@@ -1,11 +1,18 @@
-
 import os
 
-# Configure Matplotlib before importing modules that use it.
+# Limit native numerical-library thread usage.
+# These must be configured before importing NumPy,
+# Pandas, Matplotlib, or scikit-learn.
+
 os.environ["MPLCONFIGDIR"] = "/tmp/matplotlib"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use("Agg", force=True)
+
 
 import sys
 import io
@@ -917,10 +924,7 @@ def predict(request: PredictionRequest):
             [p.program_name for p in request.programs],
         )
 
-        result = predict_one(
-            request.household,
-            request.programs,
-        )
+        result = predict_one(request.household)
 
         print("[ML] Prediction:", result["vulnerability"])
         print(
@@ -954,16 +958,9 @@ def predict_batch(
     try:
 
         results = [
-
-            predict_one(
-                household,
-                request.programs,
-            )
-
-            for household
-            in request.households
-
-        ]
+    predict_one(household)
+    for household in request.households
+]
 
         return {
             "results": results

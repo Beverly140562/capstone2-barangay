@@ -7,6 +7,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import threading
+
+PLOT_LOCK = threading.RLock() 
 
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
@@ -18,21 +21,27 @@ from sklearn.metrics import (
 # COMMON PNG RENDERING
 # ---------------------------------------------------------
 
+
 def _png_buffer(fig):
-    """Convert a Matplotlib figure into a PNG response buffer."""
+    """Render a Matplotlib figure safely into a PNG buffer."""
+
     buffer = io.BytesIO()
 
     try:
-        fig.savefig(
-            buffer,
-            format="png",
-            dpi=100,
-            bbox_inches="tight",
-        )
+        with PLOT_LOCK:
+            fig.savefig(
+                buffer,
+                format="png",
+                dpi=80,
+                bbox_inches="tight",
+            )
+
         buffer.seek(0)
         return buffer
+
     finally:
         plt.close(fig)
+
 
 
 # ---------------------------------------------------------
