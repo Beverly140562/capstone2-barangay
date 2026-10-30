@@ -17,24 +17,37 @@ import {
 function normalizeSuggestedPrograms(value) {
   if (!value) return [];
 
-  let programs = value;
+  // Decode JSON strings, including strings nested inside arrays.
+  const decode = (item) => {
+    if (typeof item !== 'string') return item;
 
-  // Handle JSON stored as a string.
-  if (typeof programs === 'string') {
-    try {
-      programs = JSON.parse(programs);
-    } catch {
-      return programs.trim() ? [programs.trim()] : [];
+    const trimmed = item.trim();
+
+    if (
+      (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'))
+    ) {
+      try {
+        return decode(JSON.parse(trimmed));
+      } catch {
+        return item;
+      }
     }
+
+    return item;
+  };
+
+  let decoded = decode(value);
+
+  if (!Array.isArray(decoded)) {
+    decoded = [decoded];
   }
 
-  // Handle a single program object.
-  if (!Array.isArray(programs)) {
-    programs = [programs];
-  }
-
-  return programs
+  return decoded
+    .flat(Infinity)
     .map((program) => {
+      program = decode(program);
+
       if (typeof program === 'string') {
         return {
           program_name: program,
@@ -56,7 +69,6 @@ function normalizeSuggestedPrograms(value) {
     })
     .filter(Boolean);
 }
-
 export default function Households() {
   const [params] = useSearchParams();
   const location = useLocation();
