@@ -10,8 +10,6 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
-import matplotlib
-matplotlib.use("Agg", force=True)
 
 
 import sys
@@ -37,13 +35,6 @@ BASE = APP_DIR.parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
-from analytics_visualizations import (
-    create_vulnerability_chart,
-    create_income_chart,
-    create_feature_relationship_chart,
-    create_model_performance_chart,
-    get_model_classification_report,
-)
 
 from database import fetch_all
 from analytics import calculate_analytics
@@ -807,22 +798,16 @@ def get_vulnerability_chart(
 ):
     try:
         records = get_chart_households(
-            dateRange, purok, startDate, endDate
-        )
+    date_range=dateRange,
+    purok=purok
+)
 
-        df = pd.DataFrame(records)
+image = create_vulnerability_chart(records)
 
-        if "vulnerability" not in df.columns:
-            raise ValueError(
-                "The household query did not return vulnerability."
-            )
-
-        image = create_vulnerability_chart(df)
-
-        return StreamingResponse(
-            image,
-            media_type="image/png",
-        )
+return StreamingResponse(
+    image,
+    media_type="image/svg+xml"
+)
 
     except Exception as exc:
         import traceback
@@ -866,7 +851,7 @@ def get_income_chart(
                 "The household query did not return monthly_income."
             )
 
-        image = create_income_chart(df)
+image = create_income_chart(records)
 
         return StreamingResponse(
             image,
@@ -895,9 +880,7 @@ def get_relationship_chart(
             dateRange, purok, startDate, endDate
         )
 
-        image = create_feature_relationship_chart(
-            pd.DataFrame(records)
-        )
+       image = create_feature_relationship_chart(records)
 
         return StreamingResponse(image, media_type="image/png")
 
