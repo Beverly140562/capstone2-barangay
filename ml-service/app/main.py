@@ -624,31 +624,38 @@ def analytics(
 # PROGRAM MATCHING
 # ============================================================
 
+# ============================================================
+# PROGRAM MATCHING
+# ============================================================
+
 def normalize_rule(value: str | None) -> str:
     if not value:
         return ""
 
-    return " ".join(
-        str(value).strip().lower().split()
-    )
+    return " ".join(str(value).strip().lower().split())
 
 
 def match_programs(
     household: Household,
     vulnerability: str,
     programs: list[Program],
-) -> list[str]:
+) -> list[dict]:
     """
-    Match assistance programs using the eligibility rules
-    saved in assistance_programs.
+    Match programs using the eligibility rules saved
+    in assistance_programs.
 
-    Unknown or incomplete conditions are not treated as eligible.
+    Returns program dictionaries consistently.
     """
 
     matched_programs = []
 
     income = household.monthly_income
-    family_size = household.family_size
+
+    family_size = (
+        household.family_size
+        if household.family_size is not None
+        else household.family_number
+    )
 
     disability = household.provisional_disability_indicator
 
@@ -660,90 +667,219 @@ def match_programs(
         if not rules:
             continue
 
-        # ----------------------------------------------------
-        # 4Ps - Pantawid Pamilya
-        # Rules:
-        # Highly Vulnerable; Family Size >= 5
-        # Both conditions must be satisfied.
-        # ----------------------------------------------------
+        eligible = False
 
-        if name == "4ps - pantawid pamilya":
-
-            has_required_rules = (
-                "highly vulnerable" in rules
-                and "family size >= 5" in rules
-            )
-
-            if not has_required_rules:
-                continue
-
-            if (
+        # 4Ps: Highly Vulnerable AND family size >= 5
+        if (
+            name == "4ps - pantawid pamilya"
+            and "highly vulnerable" in rules
+            and "family size >= 5" in rules
+        ):
+            eligible = (
                 vulnerability == "Highly Vulnerable"
                 and family_size is not None
                 and family_size >= 5
-            ):
-                matched_programs.append(program.program_name)
+            )
 
-        # ----------------------------------------------------
-        # AICS - Cash Assistance
-        # Rules:
-        # Highly Vulnerable; Low income
-        #
-        # "Low income" has no numeric cutoff yet.
-        # Do not invent one.
-        # ----------------------------------------------------
-
+        # AICS: numeric low-income cutoff is not defined.
         elif name == "aics - cash assistance":
+            eligible = False
 
-            # Eligibility cannot be established until
-            # the approved low-income threshold is defined.
-            continue
-
-        # ----------------------------------------------------
-        # Medical Assistance Program
-        # Rules:
-        # Households with disabled member or senior citizen
-        #
-        # The current request provides a disability indicator,
-        # but does not provide a senior-citizen indicator.
-        # A confirmed disabled member is sufficient.
-        # ----------------------------------------------------
-
+        # Medical Assistance: confirmed disabled member.
         elif name == "medical assistance program":
-
-            has_required_rules = (
+            eligible = (
                 "disabled member" in rules
                 and "senior citizen" in rules
+                and disability is True
             )
 
-            if not has_required_rules:
-                continue
-
-            if disability is True:
-                matched_programs.append(program.program_name)
-
-        # ----------------------------------------------------
-        # Rice Subsidy Program
-        # Rules:
-        # Monthly income below 8,000 PHP
-        # ----------------------------------------------------
-
+        # Rice Subsidy: monthly income below ₱8,000.
         elif name == "rice subsidy program":
-
-            has_required_rules = (
+            eligible = (
                 "monthly income below 8,000 php" in rules
+                and income is not None
+                and income < 8000
             )
 
-            if not has_required_rules:
-                continue
-
-            if (
-                income is not None
-                and income < 8000
-            ):
-                matched_programs.append(program.program_name)
+        if eligible:
+            matched_programs.append({
+                "program_id": program.program_id,
+                "program_name": program.program_name,
+                "description": program.description,
+                "eligibility_rules": program.eligibility_rules,
+            })
 
     return matched_programs
+
+
+# ============================================================
+# VULNERABILITY LABEL MAPPING
+# ============================================================
+
+def display_vulnerability(label: str) -> str:
+
+    mapping = {
+        "High": "Highly Vulnerable",
+        "Medium": "Moderately Vulnerable",
+        "Low": "Low Vulnerable",
+    }
+
+    return mapping.get(label, label)
+
+
+# ============================================================
+# COLAB RANDOM FOREST PREDICTION
+# ============================================================
+
+def predict_one(
+    row: Household,
+    programs: list[Program] | None = None,
+):
+    ensure_model_loaded()
+
+    programs = programs or []
+
+    # --------------------------------------------------------
+    # HOUSEHOLD SIZE
+    # --------------------------------------------------------
+
+    family_size = (
+        row.family_size
+        if row.family_size is not None
+        else row.family_number
+    )
+
+    # --------------------------------------------------------
+    # PREPARE RANDOM FOREST INPUT
+    # --------------------------------------------------------
+
+    input_df = pd.DataFrame([{
+        "member_count": row.member_count,
+        "head_education": row.head_education,
+        "household_monthly_income": row.monthly_income,
+        "family_size": family_size,
+        "all_members_explicitly_unemployed":
+            row.all_members_explicitly_unemployed,
+        "provisional_disability_indicator":
+            row.provisional_disability_indicator,
+        "illness_indicator": row.illness_indicator,
+    }])
+
+    # Use the loaded model variable: _model
+    prediction = _model.predict(input_df)[0]
+    probabilities = _model.predict_proba(input_df)[0]
+    classes = _model.classes_
+
+    probability_result = {
+        str(label): round(float(prob), 4)
+        for label, prob in zip(classes, probabilities)
+    }
+
+    rf_label = str(prediction)
+    rf_vulnerability = display_vulnerability(rf_label)
+
+    rf_probability = round(
+        float(max(probabilities)),
+        4
+    )
+
+    # --------------------------------------------------------
+    # DEFAULT RANDOM FOREST RESULT
+    # --------------------------------------------------------
+
+    vulnerability = rf_vulnerability
+    suggested_programs = []
+    classification_source = "Random Forest"
+
+    # --------------------------------------------------------
+    # INCOME-BASED CLASSIFICATION
+    # --------------------------------------------------------
+
+    income = row.monthly_income
+
+    if income is not None:
+
+        # Below ₱10,000 = Highly Vulnerable
+        if income < 10000:
+
+            vulnerability = "Highly Vulnerable"
+            classification_source = "Income-based rule"
+
+            suggested_programs = match_programs(
+                row,
+                vulnerability,
+                programs,
+            )
+
+        # ₱10,000 through ₱24,000 = Moderately Vulnerable
+        elif 10000 <= income <= 24000:
+
+            vulnerability = "Moderately Vulnerable"
+            classification_source = "Income-based rule"
+
+            suggested_programs = match_programs(
+                row,
+                vulnerability,
+                programs,
+            )
+
+        # ₱25,000 and above = Low Vulnerable
+        elif income >= 25000:
+
+            vulnerability = "Low Vulnerable"
+            classification_source = "Income-based rule"
+
+            suggested_programs = []
+
+            # Special 4Ps exception:
+            # Income >= ₱25,000 AND household has more than 5 members.
+            if family_size is not None and family_size > 5:
+
+                for program in programs:
+
+                    name = normalize_rule(program.program_name)
+
+                    if (
+                        "4ps" in name
+                        or "pantawid pamilya" in name
+                    ):
+                        suggested_programs.append({
+                            "program_id": program.program_id,
+                            "program_name": program.program_name,
+                            "description": program.description,
+                            "eligibility_rules": program.eligibility_rules,
+                        })
+
+    # Income from ₱24,000.01 to below ₱25,000
+    # has no defined income bracket yet.
+    # The Random Forest result is retained for this gap.
+
+    # --------------------------------------------------------
+    # RESPONSE
+    # --------------------------------------------------------
+
+    return {
+        "vulnerability": vulnerability,
+
+        # Backward-compatible field:
+        # This remains the maximum Random Forest probability.
+        "vulnerability_prob": rf_probability,
+
+        # Original Random Forest result for transparency.
+        "rf_vulnerability": rf_vulnerability,
+        "rf_vulnerability_prob": rf_probability,
+
+        "classification_source": classification_source,
+
+        "program_eligible": (
+            True if suggested_programs else None
+        ),
+
+        "suggested_programs": suggested_programs,
+
+        "probabilities": probability_result,
+    }
+
  # ============================================================
 # COLAB RANDOM FOREST PREDICTION
 # ============================================================
