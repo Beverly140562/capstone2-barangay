@@ -157,53 +157,31 @@ def ensure_model_loaded():
 # Attempt to load the model when the application starts.
 load_model()
 
-# ============================================================
-# TRY LOADING MODEL WHEN SERVER STARTS
-# ============================================================
-
-try:
-    load_model()
-
-except Exception as e:
-    print(
-        f"WARNING: Could not load model: {e}"
-    )
-
 
 # ============================================================
 # DATA MODELS
 # ============================================================
 
-class Program(BaseModel):
-
-    program_id: str
-
-    program_name: str
-
-    description: str | None = None
-
-    eligibility_rules: str | None = None
 
 
-
-    # Existing system fields
 class Household(BaseModel):
-    monthly_income: float = 0
-    family_number: int = 1
-    age: int = 0
-    length_residency: int = 0
+    # Original household fields
+    monthly_income: float | None = None
+    family_number: int | None = None
+    age: int | None = None
+    length_residency: int | None = None
 
-    sex: str = "male"
-    civil_status: str = "Single"
-    highest_education: str = "None"
-    occupation: str = "None"
-    residence: str = "Owned"
+    sex: str | None = None
+    civil_status: str | None = None
+    highest_education: str | None = None
+    occupation: str | None = None
+    residence: str | None = None
 
-    # None means unknown; False means confirmed no disability.
     disability_present: bool | None = None
     four_ps_member: str | None = None
     leading_illnesses: str | None = None
 
+    # Seven Random Forest features
     member_count: int | None = None
     family_size: int | None = None
     head_education: str | None = None
@@ -212,47 +190,23 @@ class Household(BaseModel):
     provisional_disability_indicator: bool | None = None
     illness_indicator: bool | None = None
 
-    monthly_income: float = 0
-    family_number: int = 1
-    age: int = 0
-    length_residency: int = 0
 
-    sex: str = "male"
-    civil_status: str = "Single"
-    highest_education: str = "None"
-    occupation: str = "None"
-    residence: str = "Owned"
-    disability_present: bool = False
-
-    # Fields expected by the Colab model
-    member_count: int | None = None
-    family_size: int | None = None
-    head_education: str | None = None
-
-    all_members_explicitly_unemployed: bool | None = None
-    provisional_disability_indicator: bool | None = None
-    illness_indicator: bool | None = None
-
+class Program(BaseModel):
+    program_id: str
+    program_name: str
+    description: str | None = None
+    eligibility_rules: str | None = None
 
 
 class PredictionRequest(BaseModel):
-
     household: Household
-
-    programs: list[Program] = Field(
-        default_factory=list
-    )
+    programs: list[Program] = Field(default_factory=list)
 
 
 class BatchPredictionRequest(BaseModel):
+    households: list[Household] = Field(default_factory=list)
+    programs: list[Program] = Field(default_factory=list)
 
-    households: list[Household] = Field(
-        default_factory=list
-    )
-
-    programs: list[Program] = Field(
-        default_factory=list
-    )
 
 
 # ============================================================
@@ -660,87 +614,19 @@ def analytics(
 # PROGRAM MATCHING
 # ============================================================
 
-
 def match_programs(
     household: Household,
     vulnerability: str,
     programs: list[Program],
 ) -> list[str]:
+    """
+    Program recommendations are disabled until official,
+    approved eligibility rules are available.
 
-    matched = []
-
-    income = float(household.monthly_income or 0)
-
-    family_size = (
-        household.family_size
-        if household.family_size is not None
-        else household.member_count
-        if household.member_count is not None
-        else household.family_number
-    )
-
-    vulnerability_text = str(
-        vulnerability or ""
-    ).strip().lower()
-
-    is_highly_vulnerable = vulnerability_text in {
-        "high",
-        "highly vulnerable",
-        "high vulnerability",
-    }
-
-    has_disability = (
-        household.disability_present is True
-        or household.provisional_disability_indicator is True
-    )
-
-    is_senior = int(household.age or 0) >= 60
-
-    for program in programs:
-        name = str(program.program_name or "").strip().lower()
-
-        eligible = False
-
-        if "4ps" in name or "pantawid" in name:
-            eligible = (
-                is_highly_vulnerable
-                and family_size >= 5
-            )
-
-        elif "aics" in name or "crisis" in name:
-            # Assumption: use ₱12,000 as the low-income
-            # threshold until the program's official threshold
-            # is confirmed.
-            eligible = (
-                is_highly_vulnerable
-                and income <= 12000
-            )
-
-        elif "medical" in name:
-            eligible = has_disability or is_senior
-
-        elif "rice subsidy" in name:
-            eligible = income < 8000
-
-        print({
-            "program": program.program_name,
-            "income": income,
-            "family_size": family_size,
-            "vulnerability": vulnerability,
-            "disability_known": (
-                household.disability_present is not None
-            ),
-            "eligible_match": eligible,
-        })
-
-        if eligible:
-            matched.append(program.program_name)
-
-    print("PROGRAMS RECEIVED:", len(programs))
-    print("SUGGESTED PROGRAMS:", matched)
-
-    return matched
-
+    Random Forest vulnerability predictions do not independently
+    establish assistance-program eligibility.
+    """
+    return []
 
 
  # ============================================================
@@ -756,128 +642,94 @@ def display_vulnerability(label: str) -> str:
 
     return mapping.get(label, label)
 
+def predict_one(row: Household):
+    global _model, _feature_names
 
-def predict_one(
-    row: Household,
-    programs: list[Program],
-) -> dict:
+    if _model is None:
+        raise HTTPException(
+            status_code=503,
+            detail="ML model is not loaded."
+        )
 
-    ensure_model_loaded()
+    # Validate required information.
+    if row.member_count is None or row.member_count <= 0:
+        raise HTTPException(
+            status_code=422,
+            detail="Prediction requires at least one recorded household member."
+        )
 
-    # Use explicit model fields when supplied.
-    # Otherwise, fall back only where a reasonable mapping exists.
-    member_count = (
-        row.member_count
-        if row.member_count is not None
-        else row.family_number
-    )
+    if row.head_education is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Household head education is missing."
+        )
 
-    family_size = (
-        row.family_size
-        if row.family_size is not None
-        else row.family_number
-    )
+    if row.monthly_income is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Household monthly income is missing."
+        )
 
-    education = (
-        row.head_education
-        if row.head_education is not None
-        else row.highest_education
-    )
+    if row.family_size is None or row.family_size <= 0:
+        raise HTTPException(
+            status_code=422,
+            detail="Valid household family size is required."
+        )
 
-    disability = (
-        row.provisional_disability_indicator
-        if row.provisional_disability_indicator is not None
-        else row.disability_present
-    )
-
-    # Unknown illness status stays missing so the saved pipeline's
-    # imputer can handle it. Do not assume illness is absent.
-    illness = row.illness_indicator
-
-    # The current household form stores the head's occupation,
-    # not the employment status of every household member.
-    # Do not infer that all members are unemployed from that field.
-    all_unemployed = row.all_members_explicitly_unemployed
-
-    def yes_no(value):
-        if value is None:
-            return None
-
-        return "Yes" if has_disability(value) else "No"
-
-    # These names and data types must match the Colab pipeline.
+    # Use the exact seven features and their trained order.
     model_input = pd.DataFrame([{
-        "member_count": member_count,
-        "head_education": education,
+        "member_count": row.member_count,
+        "head_education": row.head_education,
         "household_monthly_income": row.monthly_income,
-        "family_size": family_size,
-        "all_members_explicitly_unemployed": yes_no(all_unemployed),
-        "provisional_disability_indicator": yes_no(disability),
-        "illness_indicator": yes_no(illness),
-    }], columns=_feature_names)
+        "family_size": row.family_size,
+        "all_members_explicitly_unemployed":
+            row.all_members_explicitly_unemployed,
+        "provisional_disability_indicator":
+            row.provisional_disability_indicator,
+        "illness_indicator": row.illness_indicator,
+    }])
 
-    # Predict vulnerability using the saved Colab pipeline.
-    raw_prediction = str(_model.predict(model_input)[0])
+    model_input = model_input[_feature_names]
 
-    vulnerability = display_vulnerability(raw_prediction)
+    try:
+        prediction = _model.predict(model_input)[0]
+        probabilities = _model.predict_proba(model_input)[0]
 
-    raw_probabilities = _model.predict_proba(model_input)[0]
+        classes = _model.classes_
 
-    probabilities = {
-        display_vulnerability(str(class_name)): round(
-            float(probability), 4
+        probability_result = {
+            str(label): round(float(probability), 4)
+            for label, probability in zip(classes, probabilities)
+        }
+
+        vulnerability = display_vulnerability(prediction)
+
+        return {
+            "vulnerability": vulnerability,
+            "vulnerability_prob": round(
+                float(max(probabilities)), 4
+            ),
+            "program_eligible": None,
+            "suggested_programs": [],
+            "probabilities": probability_result,
+        }
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Prediction failed: {str(exc)}"
         )
-        for class_name, probability in zip(
-            _classes,
-            raw_probabilities,
-        )
-    }
-
-    confidence = probabilities.get(vulnerability, 0.0)
-
-    # Existing program-matching function
-    suggested_programs = match_programs(
-        row,
-        vulnerability,
-        programs,
-    )
-
-    # This is your current income rule, not an official eligibility
-    # determination by the ML model.
-    program_eligible = row.monthly_income < 25000
-
-    return {
-        "vulnerability": vulnerability,
-        "vulnerability_prob": round(float(confidence), 4),
-        "program_eligible": program_eligible,
-        "suggested_programs": suggested_programs,
-        "probabilities": probabilities,
-    }
-
 # ============================================================
 # ROOT
 # ============================================================
-
 @app.get("/")
 def root():
-
     return {
-
-        "service":
-            "Barangay Luinab ML Service",
-
-        "status":
-            "running",
-
-        "model_loaded":
-            _model is not None,
-
-        "classes":
-            _classes,
-
-        "program_income_limit":
-            25000,
-
+        "service": "Barangay Luinab ML Service",
+        "status": "running",
+        "model_loaded": _model is not None,
+        "classes": _classes,
+        "features": _feature_names,
         "endpoints": [
             "/",
             "/health",
@@ -889,25 +741,18 @@ def root():
     }
 
 
-# ============================================================
-# HEALTH
-# ============================================================
-
-
 @app.get("/health")
 def health():
     return {
         "status": "ok",
         "model_loaded": _model is not None,
         "classes": _classes,
+        "features": _feature_names,
         "model_error": _model_load_error,
         "model_path": str(MODEL_PATH),
         "model_file_exists": MODEL_PATH.is_file(),
-        "program_income_limit": 25000,
     }
 
-
-    
 def get_chart_households(
     dateRange="All Time",
     purok="All Puroks",

@@ -252,6 +252,45 @@ async function updateById(
   return rows[0] || null;
 }
 
+
+async function refreshHouseholdPrediction(householdId) {
+  const rows = await query(
+    `
+      SELECT *
+      FROM households
+      WHERE household_id = $1
+      LIMIT 1
+    `,
+    [householdId]
+  );
+
+  if (!rows.length) {
+    throw new Error('Household not found.');
+  }
+
+  const household = rows[0];
+
+  const prediction = await predictHousehold(household);
+
+  await query(
+    `
+      UPDATE households
+      SET
+        vulnerability = $1,
+        vulnerability_prob = $2,
+        suggested_programs = $3
+      WHERE household_id = $4
+    `,
+    [
+      prediction.vulnerability,
+      prediction.vulnerability_prob,
+      prediction.suggested_programs,
+      householdId,
+    ]
+  );
+
+  return prediction;
+}
 /*
 |--------------------------------------------------------------------------
 | Authentication
@@ -259,6 +298,57 @@ async function updateById(
 */
 router.use(auth);
 
+
+/*
+|--------------------------------------------------------------------------
+| GET HOUSEHOLD MEMBERS
+|--------------------------------------------------------------------------
+*/
+router.get('/:id/members', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const householdRows = await query(
+      `
+        SELECT household_id
+        FROM households
+        WHERE household_id = $1
+        LIMIT 1
+      `,
+      [id]
+    );
+
+    if (!householdRows.length) {
+      return res.status(404).json({
+        error: 'Household not found.',
+      });
+    }
+
+    const members = await query(
+      `
+        SELECT *
+        FROM household_members
+        WHERE household_id = $1
+        ORDER BY full_name ASC
+      `,
+      [id]
+    );
+
+    return res.status(200).json({
+      members,
+      count: members.length,
+    });
+  } catch (error) {
+    console.error(
+      'GET /households/:id/members error:',
+      error
+    );
+
+    return res.status(500).json({
+      error: 'Failed to load household members.',
+    });
+  }
+});
 /*
 |--------------------------------------------------------------------------
 | GET ALL HOUSEHOLDS
@@ -614,7 +704,49 @@ router.put(
       );
 
       data = normalizeEmptyStrings(data);
-      data = prepareHouseholdName(data);
+
+const existingNameRows = await query(
+  `
+    SELECT
+      household_head_name,
+      given_name,
+      middle_name,
+      surname
+    FROM households
+    WHERE household_id = $1
+    LIMIT 1
+  `,
+  [req.params.id]
+);
+
+if (!existingNameRows.length) {
+  return res.status(404).json({
+    error: 'Household not found.',
+  });
+}
+
+const existingName = existingNameRows[0];
+
+const mergedName = {
+  ...existingName,
+  ...data,
+};
+
+if (
+  data.given_name !== undefined ||
+  data.middle_name !== undefined ||
+  data.surname !== undefined
+) {
+  const parts = [
+    mergedName.given_name,
+    mergedName.middle_name,
+    mergedName.surname,
+  ]
+    .map(value => String(value || '').trim())
+    .filter(Boolean);
+
+  data.household_head_name = parts.join(' ');
+}
 
       if (!Object.keys(data).length) {
         return res.status(400).json({
@@ -694,10 +826,9 @@ router.put(
           `
             UPDATE households
 SET
-    vulnerability = $1,
-    vulnerability_prob = $2,
-    suggested_programs = $3,
-    validation_status = 'Validated'
+  vulnerability = $1,
+  vulnerability_prob = $2,
+  suggested_programs = $3
 WHERE household_id = $4;
           `,
           [
