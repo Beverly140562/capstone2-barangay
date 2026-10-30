@@ -620,26 +620,139 @@ def analytics(
 # PROGRAM MATCHING
 # ============================================================
 
+# ============================================================
+# PROGRAM MATCHING
+# ============================================================
+
+def normalize_rule(value: str | None) -> str:
+    if not value:
+        return ""
+
+    return " ".join(
+        str(value).strip().lower().split()
+    )
+
+
 def match_programs(
     household: Household,
     vulnerability: str,
     programs: list[Program],
 ) -> list[str]:
     """
-    Program recommendations are disabled until official,
-    approved eligibility rules are available.
+    Match assistance programs using the eligibility rules
+    saved in assistance_programs.
 
-    Random Forest vulnerability predictions do not independently
-    establish assistance-program eligibility.
+    Unknown or incomplete conditions are not treated as eligible.
     """
-    return []
 
+    matched_programs = []
 
+    income = household.monthly_income
+    family_size = household.family_size
+
+    disability = household.provisional_disability_indicator
+
+    for program in programs:
+
+        name = normalize_rule(program.program_name)
+        rules = normalize_rule(program.eligibility_rules)
+
+        if not rules:
+            continue
+
+        # ----------------------------------------------------
+        # 4Ps - Pantawid Pamilya
+        # Rules:
+        # Highly Vulnerable; Family Size >= 5
+        # Both conditions must be satisfied.
+        # ----------------------------------------------------
+
+        if name == "4ps - pantawid pamilya":
+
+            has_required_rules = (
+                "highly vulnerable" in rules
+                and "family size >= 5" in rules
+            )
+
+            if not has_required_rules:
+                continue
+
+            if (
+                vulnerability == "Highly Vulnerable"
+                and family_size is not None
+                and family_size >= 5
+            ):
+                matched_programs.append(program.program_name)
+
+        # ----------------------------------------------------
+        # AICS - Cash Assistance
+        # Rules:
+        # Highly Vulnerable; Low income
+        #
+        # "Low income" has no numeric cutoff yet.
+        # Do not invent one.
+        # ----------------------------------------------------
+
+        elif name == "aics - cash assistance":
+
+            # Eligibility cannot be established until
+            # the approved low-income threshold is defined.
+            continue
+
+        # ----------------------------------------------------
+        # Medical Assistance Program
+        # Rules:
+        # Households with disabled member or senior citizen
+        #
+        # The current request provides a disability indicator,
+        # but does not provide a senior-citizen indicator.
+        # A confirmed disabled member is sufficient.
+        # ----------------------------------------------------
+
+        elif name == "medical assistance program":
+
+            has_required_rules = (
+                "disabled member" in rules
+                and "senior citizen" in rules
+            )
+
+            if not has_required_rules:
+                continue
+
+            if disability is True:
+                matched_programs.append(program.program_name)
+
+        # ----------------------------------------------------
+        # Rice Subsidy Program
+        # Rules:
+        # Monthly income below 8,000 PHP
+        # ----------------------------------------------------
+
+        elif name == "rice subsidy program":
+
+            has_required_rules = (
+                "monthly income below 8,000 php" in rules
+            )
+
+            if not has_required_rules:
+                continue
+
+            if (
+                income is not None
+                and income < 8000
+            ):
+                matched_programs.append(program.program_name)
+
+    return matched_programs
  # ============================================================
+# COLAB RANDOM FOREST PREDICTION
+# ============================================================
+# ============================================================
 # COLAB RANDOM FOREST PREDICTION
 # ============================================================
 
 def display_vulnerability(label: str) -> str:
+
     mapping = {
         "High": "Highly Vulnerable",
         "Medium": "Moderately Vulnerable",
@@ -648,7 +761,11 @@ def display_vulnerability(label: str) -> str:
 
     return mapping.get(label, label)
 
-def predict_one(row: Household):
+
+def predict_one(
+    row: Household,
+    programs: list[Program] | None = None,
+):
     global _model, _feature_names
 
     if _model is None:
@@ -657,7 +774,6 @@ def predict_one(row: Household):
             detail="ML model is not loaded."
         )
 
-    # Validate required information.
     if row.member_count is None or row.member_count <= 0:
         raise HTTPException(
             status_code=422,
@@ -682,7 +798,10 @@ def predict_one(row: Household):
             detail="Valid household family size is required."
         )
 
-    # Use the exact seven features and their trained order.
+    # --------------------------------------------------------
+    # 1. Prepare the exact seven Random Forest features.
+    # --------------------------------------------------------
+
     model_input = pd.DataFrame([{
         "member_count": row.member_count,
         "head_education": row.head_education,
@@ -698,7 +817,13 @@ def predict_one(row: Household):
     model_input = model_input[_feature_names]
 
     try:
+
+        # ----------------------------------------------------
+        # 2. Random Forest prediction.
+        # ----------------------------------------------------
+
         prediction = _model.predict(model_input)[0]
+
         probabilities = _model.predict_proba(model_input)[0]
 
         classes = _model.classes_
@@ -710,21 +835,46 @@ def predict_one(row: Household):
 
         vulnerability = display_vulnerability(prediction)
 
+        # ----------------------------------------------------
+        # 3. Match saved assistance program eligibility rules.
+        # ----------------------------------------------------
+
+        active_programs = programs or []
+
+        suggested_programs = match_programs(
+            household=row,
+            vulnerability=vulnerability,
+            programs=active_programs,
+        )
+
+        # ----------------------------------------------------
+        # 4. Return prediction and program suggestions.
+        # ----------------------------------------------------
+
         return {
             "vulnerability": vulnerability,
+
             "vulnerability_prob": round(
                 float(max(probabilities)), 4
             ),
-            "program_eligible": None,
-            "suggested_programs": [],
+
+            "program_eligible": (
+                True if suggested_programs else None
+            ),
+
+            "suggested_programs": suggested_programs,
+
             "probabilities": probability_result,
         }
+
+    except HTTPException:
+        raise
 
     except Exception as exc:
         raise HTTPException(
             status_code=500,
             detail=f"Prediction failed: {str(exc)}"
-        )
+        ) from exc
 # ============================================================
 # ROOT
 # ============================================================
@@ -896,27 +1046,47 @@ def get_relationship_chart(
 # SINGLE PREDICTION
 # ============================================================
 
+# ============================================================
+# SINGLE PREDICTION
+# ============================================================
 
 @app.post("/predict")
 def predict(request: PredictionRequest):
+
     try:
-        print("[ML] Programs received:", len(request.programs))
+
         print(
-            "[ML] Program names:",
-            [p.program_name for p in request.programs],
+            "[ML] Programs received:",
+            len(request.programs)
         )
 
-        result = predict_one(request.household)
+        print(
+            "[ML] Program names:",
+            [p.program_name for p in request.programs]
+        )
 
-        print("[ML] Prediction:", result["vulnerability"])
+        result = predict_one(
+            request.household,
+            request.programs,
+        )
+
+        print(
+            "[ML] Prediction:",
+            result["vulnerability"]
+        )
+
         print(
             "[ML] Suggested programs:",
-            result["suggested_programs"],
+            result["suggested_programs"]
         )
 
         return result
 
+    except HTTPException:
+        raise
+
     except Exception as exc:
+
         import traceback
         traceback.print_exc()
 
@@ -925,38 +1095,42 @@ def predict(request: PredictionRequest):
             detail=f"Prediction failed: {type(exc).__name__}: {exc}",
         ) from exc
 
-
-
-
+# ============================================================
+# BATCH PREDICTION
+# ============================================================
 # ============================================================
 # BATCH PREDICTION
 # ============================================================
 
 @app.post("/predict-batch")
-def predict_batch(
-    request: BatchPredictionRequest
-):
+def predict_batch(request: BatchPredictionRequest):
 
     try:
 
         results = [
-    predict_one(household)
-    for household in request.households
-]
+            predict_one(
+                household,
+                request.programs,
+            )
+            for household in request.households
+        ]
 
         return {
             "results": results
         }
 
-    except Exception as e:
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+
+        import traceback
+        traceback.print_exc()
 
         raise HTTPException(
             status_code=500,
-            detail=f"Batch prediction failed: {e}",
-        )
-
-
-
+            detail=f"Batch prediction failed: {type(exc).__name__}: {exc}",
+        ) from exc
 # ============================================================
 # RETRAIN
 # ============================================================
