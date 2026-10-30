@@ -762,51 +762,19 @@ def display_vulnerability(label: str) -> str:
     return mapping.get(label, label)
 
 
-def predict_one(
-    row: Household,
-    programs: list[Program] | None = None,
-):
-    global _model, _feature_names
+def predict_one(row: Household, programs=None):
+    programs = programs or []
 
-    if _model is None:
-        raise HTTPException(
-            status_code=503,
-            detail="ML model is not loaded."
-        )
-
-    if row.member_count is None or row.member_count <= 0:
-        raise HTTPException(
-            status_code=422,
-            detail="Prediction requires at least one recorded household member."
-        )
-
-    if row.head_education is None:
-        raise HTTPException(
-            status_code=422,
-            detail="Household head education is missing."
-        )
-
-    if row.monthly_income is None:
-        raise HTTPException(
-            status_code=422,
-            detail="Household monthly income is missing."
-        )
-
-    if row.family_size is None or row.family_size <= 0:
-        raise HTTPException(
-            status_code=422,
-            detail="Valid household family size is required."
-        )
-
-    # --------------------------------------------------------
-    # 1. Prepare the exact seven Random Forest features.
-    # --------------------------------------------------------
-
-    model_input = pd.DataFrame([{
+    # Prepare model input
+    input_df = pd.DataFrame([{
         "member_count": row.member_count,
         "head_education": row.head_education,
         "household_monthly_income": row.monthly_income,
-        "family_size": row.family_size,
+        "family_size": (
+            row.family_size
+            if row.family_size is not None
+            else row.family_number
+        ),
         "all_members_explicitly_unemployed":
             row.all_members_explicitly_unemployed,
         "provisional_disability_indicator":
@@ -814,58 +782,94 @@ def predict_one(
         "illness_indicator": row.illness_indicator,
     }])
 
-    model_input = model_input[_feature_names]
+    # Random Forest prediction
+    prediction = model.predict(input_df)[0]
+    probabilities = model.predict_proba(input_df)[0]
+    classes = model.classes_
 
-    try:
+    probability_result = {
+        str(label): round(float(prob), 4)
+        for label, prob in zip(classes, probabilities)
+    }
 
-        # ----------------------------------------------------
-        # 2. Random Forest prediction.
-        # ----------------------------------------------------
+    rf_label = str(prediction)
 
-        prediction = _model.predict(model_input)[0]
+    display_labels = {
+        "High": "Highly Vulnerable",
+        "Medium": "Moderately Vulnerable",
+        "Low": "Low Vulnerable",
+    }
 
-        probabilities = _model.predict_proba(model_input)[0]
+    rf_vulnerability = display_labels.get(
+        rf_label, rf_label
+    )
 
-        classes = _model.classes_
+    rf_probability = round(
+        float(max(probabilities)), 4
+    )
 
-        probability_result = {
-            str(label): round(float(probability), 4)
-            for label, probability in zip(classes, probabilities)
-        }
+    # Household values
+    income = row.monthly_income
+    family_size = (
+        row.family_size
+        if row.family_size is not None
+        else row.family_number
+    )
 
-        vulnerability = display_vulnerability(prediction)
+    # Default: retain Random Forest result
+    vulnerability = rf_vulnerability
+    suggested_programs = []
+    classification_source = "Random Forest"
 
-        # ----------------------------------------------------
-        # 3. Match saved assistance program eligibility rules.
-        # ----------------------------------------------------
+    # INCOME-BASED OVERRIDE
+    # INCOME-BASED CLASSIFICATION
+if income is not None:
 
-        active_programs = programs or []
+    if income < 10000:
+        vulnerability = "Highly Vulnerable"
+        classification_source = "Income-based rule"
 
         suggested_programs = match_programs(
-            household=row,
-            vulnerability=vulnerability,
-            programs=active_programs,
+            row, vulnerability, programs
         )
 
-        # ----------------------------------------------------
-        # 4. Return prediction and program suggestions.
-        # ----------------------------------------------------
+    elif 10000 <= income <= 24000:
+        vulnerability = "Moderately Vulnerable"
+        classification_source = "Income-based rule"
 
-        return {
-            "vulnerability": vulnerability,
+        suggested_programs = match_programs(
+            row, vulnerability, programs
+        )
 
-            "vulnerability_prob": round(
-                float(max(probabilities)), 4
-            ),
+    else:  # ₱25,000 and above
+        vulnerability = "Low Vulnerable"
+        classification_source = "Income-based rule"
+        suggested_programs = []
 
-            "program_eligible": (
-                True if suggested_programs else None
-            ),
-
-            "suggested_programs": suggested_programs,
-
-            "probabilities": probability_result,
-        }
+        if family_size is not None and family_size > 5:
+            for program in programs:
+                if (
+                    "4ps" in program.program_name.lower()
+                    or "pantawid pamilya" in program.program_name.lower()
+                ):
+                    suggested_programs.append({
+                        "program_id": program.program_id,
+                        "program_name": program.program_name,
+                        "description": program.description,
+                        "eligibility_rules": program.eligibility_rules,
+                    })
+    return {
+        "vulnerability": vulnerability,
+        "vulnerability_prob": rf_probability,
+        "rf_vulnerability": rf_vulnerability,
+        "rf_vulnerability_prob": rf_probability,
+        "classification_source": classification_source,
+        "program_eligible": (
+            True if suggested_programs else None
+        ),
+        "suggested_programs": suggested_programs,
+        "probabilities": probability_result,
+    }
 
     except HTTPException:
         raise
