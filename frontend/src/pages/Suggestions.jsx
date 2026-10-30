@@ -274,43 +274,78 @@ export default function Suggestions() {
   // ]
   // ==================================================
 
-  const normalizeSuggestedPrograms = (
-    suggestedPrograms
-  ) => {
-    if (!Array.isArray(suggestedPrograms)) {
-      return [];
-    }
+  const normalizeSuggestedPrograms = (suggestedPrograms) => {
+  if (!Array.isArray(suggestedPrograms)) {
+    return [];
+  }
 
-    return suggestedPrograms
-      .map((programValue) => {
-        const name = String(
-          programValue || ''
+  return suggestedPrograms
+    .map((value) => {
+      if (!value) return null;
+
+      // New JSON object format
+      if (
+        typeof value === 'object' &&
+        !Array.isArray(value)
+      ) {
+        const programId = String(
+          value.program_id || ''
         ).trim();
 
-        if (!name) {
+        const programName = String(
+          value.program_name || ''
+        ).trim();
+
+        if (!programId && !programName) {
           return null;
         }
 
         const matchingProgram = programs.find(
           (program) =>
-            String(program.program_name || '')
-              .trim()
-              .toLowerCase() ===
-            name.toLowerCase()
+            (
+              programId &&
+              String(program.program_id) === programId
+            ) ||
+            (
+              programName &&
+              String(program.program_name || '')
+                .trim()
+                .toLowerCase() === programName.toLowerCase()
+            )
         );
 
-        if (!matchingProgram) {
-          return null;
-        }
-
         return {
-          program_id: matchingProgram.program_id,
+          ...value,
+          ...(matchingProgram || {}),
+          program_id:
+            matchingProgram?.program_id || programId,
           program_name:
-            matchingProgram.program_name || name,
+            matchingProgram?.program_name || programName,
         };
-      })
-      .filter(Boolean);
-  };
+      }
+
+      // Old string format
+      const name = String(value).trim();
+
+      if (!name) return null;
+
+      const matchingProgram = programs.find(
+        (program) =>
+          String(program.program_name || '')
+            .trim()
+            .toLowerCase() === name.toLowerCase()
+      );
+
+      if (!matchingProgram) return null;
+
+      return {
+        ...matchingProgram,
+        program_id: matchingProgram.program_id,
+        program_name: matchingProgram.program_name,
+      };
+    })
+    .filter(Boolean);
+};
 
   // ==================================================
   // FILTER HOUSEHOLDS
@@ -354,64 +389,30 @@ export default function Suggestions() {
   // ==================================================
 
   const suggestedPrograms = useMemo(() => {
-    const programMap = new Map();
+  const programMap = new Map();
 
-    households.forEach((household) => {
-      if (
-        !Array.isArray(
-          household.suggested_programs
-        )
-      ) {
-        return;
-      }
+  households.forEach((household) => {
+    const normalized = normalizeSuggestedPrograms(
+      household.suggested_programs
+    );
 
-      household.suggested_programs.forEach(
-        (programName) => {
-          const name = String(
-            programName || ''
-          ).trim();
+    normalized.forEach((program) => {
+      if (!program.program_id) return;
 
-          if (!name) return;
-
-          const matchingProgram =
-            programs.find(
-              (program) =>
-                String(
-                  program.program_name || ''
-                )
-                  .trim()
-                  .toLowerCase() ===
-                name.toLowerCase()
-            );
-
-          if (!matchingProgram) return;
-
-          const programId = String(
-            matchingProgram.program_id || ''
-          );
-
-          if (!programId) return;
-
-          programMap.set(programId, {
-            ...matchingProgram,
-            program_name:
-              matchingProgram.program_name ||
-              name,
-          });
-        }
+      programMap.set(
+        String(program.program_id),
+        program
       );
     });
+  });
 
-    return Array.from(
-      programMap.values()
-    ).sort((a, b) =>
-      String(
-        a.program_name || ''
-      ).localeCompare(
+  return Array.from(programMap.values()).sort(
+    (a, b) =>
+      String(a.program_name || '').localeCompare(
         String(b.program_name || '')
       )
-    );
-  }, [households, programs]);
+  );
+}, [households, programs]);
 
   // ==================================================
   // SELECT PROGRAM
@@ -1667,48 +1668,33 @@ export default function Suggestions() {
 
                     <td className="px-5 py-3">
                       <div className="flex flex-wrap gap-1">
-                        {Array.isArray(
-                          household.suggested_programs
-                        ) &&
-                        household
-                          .suggested_programs
-                          .length > 0
-                          ? household.suggested_programs.map(
-                              (
-                                programName
-                              ) => {
-                                const isSelected =
-                                  String(
-                                    programName ||
-                                      ''
-                                  )
-                                    .trim()
-                                    .toLowerCase() ===
-                                  String(
-                                    generated.program ||
-                                      ''
-                                  )
-                                    .trim()
-                                    .toLowerCase();
+  {normalizeSuggestedPrograms(
+    household.suggested_programs
+  ).length > 0 ? (
+    normalizeSuggestedPrograms(
+      household.suggested_programs
+    ).map((program) => {
+      const isSelected =
+        String(program.program_id) ===
+        String(generated.program_id);
 
-                                return (
-                                  <span
-                                    key={`${household.household_id}-${programName}`}
-                                    className={
-                                      isSelected
-                                        ? 'px-2 py-1 rounded bg-[#6E2430] text-white font-bold'
-                                        : 'px-2 py-1 rounded text-[#6E2430]'
-                                    }
-                                  >
-                                    {
-                                      programName
-                                    }
-                                  </span>
-                                );
-                              }
-                            )
-                          : '—'}
-                      </div>
+      return (
+        <span
+          key={`${household.household_id}-${program.program_id}`}
+          className={
+            isSelected
+              ? 'px-2 py-1 rounded bg-[#6E2430] text-white font-bold'
+              : 'px-2 py-1 rounded text-[#6E2430]'
+          }
+        >
+          {program.program_name}
+        </span>
+      );
+    })
+  ) : (
+    '—'
+  )}
+</div>
                     </td>
 
                     <td className="px-5 py-3">
@@ -1965,32 +1951,27 @@ export default function Suggestions() {
                     </td>
 
                     <td className="px-5 py-4 text-2xl font-medium">
-                      {Array.isArray(
-                        household.suggested_programs
-                      ) &&
-                      household
-                        .suggested_programs
-                        .length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          {household.suggested_programs.map(
-                            (
-                              programName
-                            ) => (
-                              <span
-                                key={`${household.household_id}-${programName}`}
-                                className="text-[#6E2430] text-xl font-medium"
-                              >
-                                {
-                                  programName
-                                }
-                              </span>
-                            )
-                          )}
-                        </div>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
+  {(() => {
+    const normalized = normalizeSuggestedPrograms(
+      household.suggested_programs
+    );
+
+    return normalized.length > 0 ? (
+      <div className="flex flex-wrap gap-2">
+        {normalized.map((program) => (
+          <span
+            key={`${household.household_id}-${program.program_id}`}
+            className="text-[#6E2430] text-xl font-medium"
+          >
+            {program.program_name}
+          </span>
+        ))}
+      </div>
+    ) : (
+      '—'
+    );
+  })()}
+</td>
 
                     <td className="px-5 py-2 text-2xl font-medium">
                       <Status
@@ -2068,22 +2049,19 @@ export default function Suggestions() {
                   : ', no stable employment'}
               </span>
             </div>
+<div>
+  <span className="font-bold text-ink">
+    Suggested Programs:{' '}
+  </span>
 
-            <div>
-              <span className="font-bold text-ink">
-                Suggested Programs:{' '}
-              </span>
-
-              <span className="text-muted">
-                {Array.isArray(
-                  detail.suggested_programs
-                )
-                  ? detail.suggested_programs.join(
-                      ', '
-                    ) || 'None'
-                  : 'None'}
-              </span>
-            </div>
+  <span className="text-muted">
+    {normalizeSuggestedPrograms(
+      detail.suggested_programs
+    )
+      .map((program) => program.program_name)
+      .join(', ') || 'None'}
+  </span>
+</div>
 
             <div>
               <span className="font-bold text-ink">
