@@ -4,12 +4,6 @@ import os
 # These must be configured before importing NumPy,
 # Pandas, Matplotlib, or scikit-learn.
 
-os.environ["MPLCONFIGDIR"] = "/tmp/matplotlib"
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
-
 
 
 import sys
@@ -38,6 +32,12 @@ if str(APP_DIR) not in sys.path:
 
 from database import fetch_all
 from analytics import calculate_analytics
+
+from analytics_visualizations import (
+    create_vulnerability_chart,
+    create_income_chart,
+    create_feature_relationship_chart,
+)
 
 MODEL_PATH = BASE / "model" / "luinab_household_rf_pipeline.joblib"
 
@@ -789,6 +789,7 @@ def get_chart_households(
 
 
 
+
 @app.get("/analytics/charts/vulnerability")
 def get_vulnerability_chart(
     dateRange: str = Query("All Time"),
@@ -798,16 +799,20 @@ def get_vulnerability_chart(
 ):
     try:
         records = get_chart_households(
-    date_range=dateRange,
-    purok=purok
-)
+            dateRange=dateRange,
+            purok=purok,
+            startDate=startDate,
+            endDate=endDate,
+        )
 
-image = create_vulnerability_chart(records)
+        print("Vulnerability chart records:", len(records))
 
-return StreamingResponse(
-    image,
-    media_type="image/svg+xml"
-)
+        image = create_vulnerability_chart(records)
+
+        return StreamingResponse(
+            image,
+            media_type="image/svg+xml",
+        )
 
     except Exception as exc:
         import traceback
@@ -815,13 +820,8 @@ return StreamingResponse(
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                f"Vulnerability chart failed: "
-                f"{type(exc).__name__}: {exc}"
-            ),
+            detail=f"Vulnerability chart failed: {type(exc).__name__}: {exc}",
         ) from exc
-
-
 
 
 @app.get("/analytics/charts/income")
@@ -833,29 +833,19 @@ def get_income_chart(
 ):
     try:
         records = get_chart_households(
-            dateRange, purok, startDate, endDate
+            dateRange=dateRange,
+            purok=purok,
+            startDate=startDate,
+            endDate=endDate,
         )
 
-        print("Income chart: fetched records =", len(records))
-        print(
-            "Income chart: sample record =",
-            records[0] if records else "No records"
-        )
+        print("Income chart records:", len(records))
 
-        df = pd.DataFrame(records)
-
-        print("Income chart: columns =", df.columns.tolist())
-
-        if "monthly_income" not in df.columns:
-            raise ValueError(
-                "The household query did not return monthly_income."
-            )
-
-image = create_income_chart(records)
+        image = create_income_chart(records)
 
         return StreamingResponse(
             image,
-            media_type="image/png",
+            media_type="image/svg+xml",
         )
 
     except Exception as exc:
@@ -865,7 +855,7 @@ image = create_income_chart(records)
         raise HTTPException(
             status_code=500,
             detail=f"Income chart failed: {type(exc).__name__}: {exc}",
-        )
+        ) from exc
 
 
 @app.get("/analytics/charts/relationships")
@@ -877,20 +867,29 @@ def get_relationship_chart(
 ):
     try:
         records = get_chart_households(
-            dateRange, purok, startDate, endDate
+            dateRange=dateRange,
+            purok=purok,
+            startDate=startDate,
+            endDate=endDate,
         )
 
-       image = create_feature_relationship_chart(records)
+        print("Relationships chart records:", len(records))
 
-        return StreamingResponse(image, media_type="image/png")
+        image = create_feature_relationship_chart(records)
+
+        return StreamingResponse(
+            image,
+            media_type="image/svg+xml",
+        )
 
     except Exception as exc:
         import traceback
         traceback.print_exc()
+
         raise HTTPException(
             status_code=500,
-            detail=f"Relationship chart failed: {exc}",
-        )
+            detail=f"Relationship chart failed: {type(exc).__name__}: {exc}",
+        ) from exc
 
 
 # ============================================================
