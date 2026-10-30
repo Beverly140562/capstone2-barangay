@@ -14,6 +14,49 @@ import {
   Input,
 } from '../components/ui';
 
+function normalizeSuggestedPrograms(value) {
+  if (!value) return [];
+
+  let programs = value;
+
+  // Handle JSON stored as a string.
+  if (typeof programs === 'string') {
+    try {
+      programs = JSON.parse(programs);
+    } catch {
+      return programs.trim() ? [programs.trim()] : [];
+    }
+  }
+
+  // Handle a single program object.
+  if (!Array.isArray(programs)) {
+    programs = [programs];
+  }
+
+  return programs
+    .map((program) => {
+      if (typeof program === 'string') {
+        return {
+          program_name: program,
+          description: '',
+        };
+      }
+
+      if (program && typeof program === 'object') {
+        return {
+          program_name:
+            program.program_name ||
+            program.name ||
+            'Unnamed Program',
+          description: program.description || '',
+        };
+      }
+
+      return null;
+    })
+    .filter(Boolean);
+}
+
 export default function Households() {
   const [params] = useSearchParams();
   const location = useLocation();
@@ -240,11 +283,13 @@ const open = async (id) => {
               const householdStatus =
                 h.household_status || 'Active';
 
-              const programs = Array.isArray(
-                h.suggested_programs
-              )
-                ? h.suggested_programs.join(', ')
-                : h.suggested_programs || '—';
+              const programs = normalizeSuggestedPrograms(
+  h.suggested_programs
+);
+
+const programNames = programs
+  .map((program) => program.program_name)
+  .join(', ') || '—';
 
               return (
                 <tr
@@ -278,8 +323,8 @@ const open = async (id) => {
                   </td>
 
                   <td className="px-5 py-2 text-[#6E2430]">
-                    {programs}
-                  </td>
+  {programNames}
+</td>
 
                   <td
                     className="px-5 py-2"
@@ -391,13 +436,9 @@ const members = Array.isArray(data?.members)
     }
   };
 
-  const programs = Array.isArray(
-    household.suggested_programs
-  )
-    ? household.suggested_programs
-    : household.suggested_programs
-    ? [household.suggested_programs]
-    : [];
+  const programs = normalizeSuggestedPrograms(
+  household.suggested_programs
+);
 
     const formatDate = (value) => {
   if (!value) return '—';
@@ -523,17 +564,30 @@ const members = Array.isArray(data?.members)
             Suggested Programs
           </div>
 
-          <ul className="list-disc list-inside text-lg mt-1">
-            {programs.length ? (
-              programs.map((program, index) => (
-                <li key={`${program}-${index}`}>
-                  {program}
-                </li>
-              ))
-            ) : (
-              <li className="text-red-200">None</li>
-            )}
-          </ul>
+          <div className="mt-2 space-y-3">
+  {programs.length > 0 ? (
+    programs.map((program, index) => (
+      <div
+        key={`${program.program_name}-${index}`}
+        className="rounded-lg bg-white/10 border border-white/20 p-3"
+      >
+        <div className="font-semibold text-white">
+          {program.program_name}
+        </div>
+
+        {program.description && (
+          <p className="text-sm text-red-100 mt-1">
+            {program.description}
+          </p>
+        )}
+      </div>
+    ))
+  ) : (
+    <p className="text-red-200">
+      No suggested programs.
+    </p>
+  )}
+</div>
         </section>
 
         {/* Household Members */}
