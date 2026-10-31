@@ -22,12 +22,17 @@ function normalizeText(value) {
   return String(value).trim().toLowerCase();
 }
 
-/**
- * Returns:
- * true  - Every member explicitly has occupation "none".
- * false - At least one member has another recorded occupation.
- * null  - No members or insufficient occupation information.
- */
+/*
+|--------------------------------------------------------------------------
+| Check whether all members are explicitly unemployed
+|--------------------------------------------------------------------------
+| true  = Every member has occupation "none".
+| false = At least one member has another recorded occupation.
+| null  = Occupation information is incomplete.
+|
+| Keep these values consistent with the labels used to train your model.
+|--------------------------------------------------------------------------
+*/
 function getAllMembersExplicitlyUnemployed(members) {
   if (!Array.isArray(members) || members.length === 0) {
     return null;
@@ -37,7 +42,6 @@ function getAllMembersExplicitlyUnemployed(members) {
     normalizeText(member.occupation)
   );
 
-  // At least one explicitly recorded occupation other than "none".
   if (
     occupations.some(
       (occupation) => occupation !== '' && occupation !== 'none'
@@ -46,21 +50,18 @@ function getAllMembersExplicitlyUnemployed(members) {
     return false;
   }
 
-  // Every member must explicitly have occupation "none".
   if (occupations.every((occupation) => occupation === 'none')) {
     return true;
   }
 
-  // At least one occupation is missing.
   return null;
 }
 
-/**
- * Returns:
- * true  - At least one member is explicitly marked Yes.
- * false - Every member is explicitly marked No.
- * null  - No members or disability status is incomplete/unknown.
- */
+/*
+|--------------------------------------------------------------------------
+| Determine disability indicator
+|--------------------------------------------------------------------------
+*/
 function getDisabilityIndicator(members) {
   if (!Array.isArray(members) || members.length === 0) {
     return null;
@@ -70,17 +71,54 @@ function getDisabilityIndicator(members) {
     normalizeText(member.disability_present)
   );
 
-  if (statuses.includes('yes')) {
+  if (statuses.some((status) => ['yes', 'true', '1'].includes(status))) {
     return true;
   }
 
-  if (statuses.every((status) => status === 'no')) {
+  if (statuses.every((status) => ['no', 'false', '0'].includes(status))) {
     return false;
   }
 
   return null;
 }
 
+/*
+|--------------------------------------------------------------------------
+| Normalize suggested programs
+|--------------------------------------------------------------------------
+| PostgreSQL suggested_programs is a text[] column.
+| Store program names, not JSON objects.
+|--------------------------------------------------------------------------
+*/
+function normalizeSuggestedPrograms(programs) {
+  if (!Array.isArray(programs)) {
+    return [];
+  }
+
+  return programs
+    .map((program) => {
+      if (typeof program === 'string') {
+        return program.trim();
+      }
+
+      if (program && typeof program === 'object') {
+        return String(
+          program.program_name ||
+          program.name ||
+          ''
+        ).trim();
+      }
+
+      return '';
+    })
+    .filter(Boolean);
+}
+
+/*
+|--------------------------------------------------------------------------
+| Predict household vulnerability and suggested programs
+|--------------------------------------------------------------------------
+*/
 async function predictHousehold(household) {
   if (!household?.household_id) {
     throw new Error(
@@ -90,18 +128,19 @@ async function predictHousehold(household) {
 
   // 1. Retrieve actual household members.
   const members = await query(
-    `SELECT
-       member_id,
-       occupation,
-       disability_present
-     FROM household_members
-     WHERE household_id = $1`,
+    `
+      SELECT
+        member_id,
+        occupation,
+        disability_present
+      FROM household_members
+      WHERE household_id = $1
+    `,
     [household.household_id]
   );
 
   const memberRows = Array.isArray(members) ? members : [];
 
-  // 2. Do not predict when no actual member records exist.
   if (memberRows.length === 0) {
     throw new Error(
       `Cannot predict household ${household.household_id}: ` +
@@ -109,24 +148,21 @@ async function predictHousehold(household) {
     );
   }
 
-  // 3. Retrieve active assistance programs.
+  // 2. Retrieve active assistance programs.
   const programs = await query(
-    `SELECT
-       program_id,
-       program_name,
-       description,
-       eligibility_rules
-     FROM assistance_programs
-     WHERE is_active = TRUE
-     ORDER BY program_name`
+    `
+      SELECT
+        program_id,
+        program_name,
+        description,
+        eligibility_rules
+      FROM assistance_programs
+      WHERE is_active = TRUE
+      ORDER BY program_name
+    `
   );
 
-  // 4. Prepare the seven model features.
-  //
-  // Database source:
-  // households.monthly_income = household-level income.
-  //
-  // Do not use the sum of household member incomes.
+  // 3. Prepare the model features.
   const modelHousehold = {
     member_count: memberRows.length,
 
@@ -147,11 +183,11 @@ async function predictHousehold(household) {
     provisional_disability_indicator:
       getDisabilityIndicator(memberRows),
 
-    // No confirmed illness source is currently available.
+    // No confirmed illness data source is available yet.
     illness_indicator: null,
   };
 
-  // 5. Validate required household-level features.
+  // 4. Validate required features.
   const requiredFields = [
     'head_education',
     'monthly_income',
@@ -179,21 +215,17 @@ async function predictHousehold(household) {
     !Number.isInteger(modelHousehold.member_count) ||
     modelHousehold.member_count <= 0
   ) {
-    throw new Error(
-      'A valid actual household member count is required.'
-    );
+    throw new Error('A valid household member count is required.');
   }
 
   if (
     !Number.isInteger(modelHousehold.family_size) ||
     modelHousehold.family_size <= 0
   ) {
-    throw new Error(
-      'A valid household family size is required.'
-    );
+    throw new Error('A valid household family size is required.');
   }
 
-  // 6. Send prediction request to FastAPI.
+  // 5. Send prediction request to FastAPI.
   const response = await fetch(`${ML_SERVICE_URL}/predict`, {
     method: 'POST',
     headers: {
@@ -205,7 +237,7 @@ async function predictHousehold(household) {
     }),
   });
 
-  // 7. Parse service response.
+  // 6. Parse the ML service response.
   const responseText = await response.text();
 
   let result;
@@ -232,7 +264,13 @@ async function predictHousehold(household) {
     );
   }
 
-  return result;
+  // 7. Normalize suggested programs for PostgreSQL text[].
+  return {
+    ...result,
+    suggested_programs: normalizeSuggestedPrograms(
+      result.suggested_programs
+    ),
+  };
 }
 
 module.exports = {

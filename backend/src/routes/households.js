@@ -255,10 +255,12 @@ async function updateById(
 
 async function refreshHouseholdPrediction(householdId) {
   const rows = await query(
-    `SELECT *
-     FROM households
-     WHERE household_id = $1
-     LIMIT 1`,
+    `
+      SELECT *
+      FROM households
+      WHERE household_id = $1
+      LIMIT 1
+    `,
     [householdId]
   );
 
@@ -268,17 +270,25 @@ async function refreshHouseholdPrediction(householdId) {
 
   const prediction = await predictHousehold(rows[0]);
 
+  const suggestedPrograms = Array.isArray(
+    prediction.suggested_programs
+  )
+    ? prediction.suggested_programs
+    : [];
+
   await query(
-    `UPDATE households
-     SET
-       vulnerability = $1,
-       vulnerability_prob = $2,
-       suggested_programs = $3
-     WHERE household_id = $4`,
+    `
+      UPDATE households
+      SET
+        vulnerability = $1,
+        vulnerability_prob = $2,
+        suggested_programs = $3
+      WHERE household_id = $4
+    `,
     [
-      prediction.vulnerability,
-      prediction.vulnerability_prob,
-      JSON.stringify(prediction.suggested_programs || []),
+      prediction.vulnerability ?? null,
+      prediction.vulnerability_prob ?? null,
+      suggestedPrograms,
       householdId,
     ]
   );
@@ -647,11 +657,13 @@ router.post(
             WHERE household_id = $4
           `,
           [
-            prediction.vulnerability,
-            prediction.vulnerability_prob,
-            prediction.suggested_programs,
-            household.household_id,
-          ]
+  prediction.vulnerability ?? null,
+  prediction.vulnerability_prob ?? null,
+  Array.isArray(prediction.suggested_programs)
+    ? prediction.suggested_programs
+    : [],
+  household.household_id,
+]
         );
       } catch (mlError) {
         console.error(
@@ -826,11 +838,13 @@ SET
 WHERE household_id = $4;
           `,
           [
-            prediction.vulnerability,
-            prediction.vulnerability_prob,
-            prediction.suggested_programs,
-            household.household_id,
-          ]
+  prediction.vulnerability ?? null,
+  prediction.vulnerability_prob ?? null,
+  Array.isArray(prediction.suggested_programs)
+    ? prediction.suggested_programs
+    : [],
+  household.household_id,
+]
         );
       } catch (mlError) {
         console.error(
