@@ -266,22 +266,20 @@ router.post(
       );
 
       if (existing[0]) {
-        const current = existing[0];
+  const current = existing[0];
 
-        if (
-          current.validation_status === 'Pending' ||
-          current.validation_status === 'Approved'
-        ) {
-          return res.status(409).json({
-            error:
-              current.validation_status === 'Pending'
-                ? 'This household is already Pending for this assistance program.'
-                : 'This household is already Approved for this assistance program.',
-            validation_id: current.validation_id,
-            validation_status: current.validation_status,
-          });
-        }
-      }
+  if (
+    current.validation_status === 'Pending' ||
+    current.validation_status === 'Approved'
+  ) {
+    return res.status(409).json({
+      error:
+        current.validation_status === 'Pending'
+          ? 'This household is already Pending for this assistance program.'
+          : 'This household is already Approved for this assistance program.',
+    });
+  }
+}
 
       // ------------------------------------------------
       // AUTHENTICATED USER

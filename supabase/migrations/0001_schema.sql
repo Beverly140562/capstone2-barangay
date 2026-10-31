@@ -233,11 +233,42 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 
 
-create index if not exists idx_households_validation on households(validation_status);
-create index if not exists idx_households_vulnerability on households(vulnerability);
-create index if not exists idx_members_household on household_members(household_id);
-create index if not exists idx_distribution_program on ml_assistance_distribution(program_id);
-create index if not exists idx_calamity_programs_household on calamity_programs(household_id);
-CREATE INDEX IF NOT EXISTS idx_beneficiary_validation_status ON beneficiary_validation (validation_status);
-CREATE INDEX IF NOT EXISTS idx_beneficiary_validation_program ON beneficiary_validation (program_id);
-CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read, created_at DESC);
+-- HOUSEHOLD INDEXES
+CREATE INDEX IF NOT EXISTS idx_households_validation
+ON households(validation_status);
+
+CREATE INDEX IF NOT EXISTS idx_households_vulnerability
+ON households(vulnerability);
+
+-- HOUSEHOLD MEMBERS INDEX
+CREATE INDEX IF NOT EXISTS idx_members_household
+ON household_members(household_id);
+
+-- ASSISTANCE DISTRIBUTION INDEX
+CREATE INDEX IF NOT EXISTS idx_distribution_program
+ON ml_assistance_distribution(program_id);
+
+-- CALAMITY PROGRAM INDEX
+CREATE INDEX IF NOT EXISTS idx_calamity_programs_household
+ON calamity_programs(household_id);
+
+-- BENEFICIARY VALIDATION INDEXES
+CREATE INDEX IF NOT EXISTS idx_beneficiary_validation_status
+ON beneficiary_validation(validation_status);
+
+CREATE INDEX IF NOT EXISTS idx_beneficiary_validation_program
+ON beneficiary_validation(program_id);
+
+-- Prevent duplicate active submissions,
+-- but allow resubmission after Rejected.
+ALTER TABLE beneficiary_validation
+DROP CONSTRAINT IF EXISTS
+beneficiary_validation_household_id_program_id_key;
+
+CREATE UNIQUE INDEX IF NOT EXISTS unique_active_beneficiary_validation
+ON beneficiary_validation(household_id, program_id)
+WHERE validation_status IN ('Pending', 'Approved');
+
+-- NOTIFICATION INDEX
+CREATE INDEX IF NOT EXISTS idx_notifications_user
+ON notifications(user_id, is_read, created_at DESC);

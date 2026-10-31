@@ -68,30 +68,54 @@ function programsText(programs) {
     return '—';
   }
 
-  if (Array.isArray(programs)) {
-    return programs.length
-      ? programs.join(', ')
-      : '—';
-  }
+  let items = programs;
 
-  if (typeof programs === 'string') {
-    const value = programs.trim();
+  // Parse JSON strings when possible
+  if (typeof items === 'string') {
+    const value = items.trim();
 
-    if (!value) {
-      return '—';
+    if (!value) return '—';
+
+    try {
+      items = JSON.parse(value);
+    } catch {
+      // Treat it as ordinary comma-separated text
+      return value
+        .replace(/^\s*\{\s*/, '')
+        .replace(/\s*\}\s*$/, '')
+        .replace(/"/g, '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .join(', ') || '—';
     }
-
-    return value
-      .replace(/^\{/, '')
-      .replace(/\}$/, '')
-      .replace(/"/g, '')
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .join(', ') || '—';
   }
 
-  return String(programs);
+  // Convert a single item into an array
+  if (!Array.isArray(items)) {
+    items = [items];
+  }
+
+  const names = items
+    .map((item) => {
+      if (typeof item === 'string') {
+        return item.trim();
+      }
+
+      if (item && typeof item === 'object') {
+        return (
+          item.program_name ||
+          item.name ||
+          item.title ||
+          ''
+        );
+      }
+
+      return '';
+    })
+    .filter(Boolean);
+
+  return names.length ? names.join(', ') : '—';
 }
 
 /* ==========================================================================

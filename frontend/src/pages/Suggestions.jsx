@@ -232,32 +232,30 @@ export default function Suggestions() {
   //
   // This is NOT household.validation_status.
   // ==================================================
+const getProgramValidation = (
+  householdId,
+  programId
+) => {
+  if (!householdId || !programId) {
+    return null;
+  }
 
-  const getProgramValidation = (
-    householdId,
-    programId
-  ) => {
-    if (!householdId || !programId) {
-      return null;
-    }
-
-    return (
-      beneficiaryStatuses
-        .filter(
-          (item) =>
-            String(item.household_id) ===
-              String(householdId) &&
-            String(item.program_id) ===
-              String(programId)
-        )
-        .sort(
-          (a, b) =>
-            new Date(b.submitted_at || 0) -
-            new Date(a.submitted_at || 0)
-        )[0] || null
-    );
-  };
-
+  return (
+    beneficiaryStatuses
+      .filter(
+        (item) =>
+          String(item.household_id) ===
+            String(householdId) &&
+          String(item.program_id) ===
+            String(programId)
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.submitted_at || 0).getTime() -
+          new Date(a.submitted_at || 0).getTime()
+      )[0] || null
+  );
+};
   // ==================================================
   // NORMALIZE SUGGESTED PROGRAMS
   //
@@ -273,80 +271,91 @@ export default function Suggestions() {
   //   }
   // ]
   // ==================================================
+const normalizeSuggestedPrograms = (suggestedPrograms) => {
+  if (!suggestedPrograms) return [];
 
-  const normalizeSuggestedPrograms = (suggestedPrograms) => {
-  if (!Array.isArray(suggestedPrograms)) {
-    return [];
+  let items = suggestedPrograms;
+
+  if (typeof items === 'string') {
+    const value = items.trim();
+
+    if (!value) return [];
+
+    try {
+      items = JSON.parse(value);
+    } catch {
+      // Handle PostgreSQL array text such as:
+      // {"Rice Subsidy Program","4Ps"}
+
+      if (value.startsWith('{') && value.endsWith('}')) {
+        items = value
+          .slice(1, -1)
+          .split(',')
+          .map((item) =>
+            item.trim().replace(/^"|"$/g, '')
+          )
+          .filter(Boolean);
+      } else {
+        items = value.split(',').map((item) => item.trim());
+      }
+    }
   }
 
-  return suggestedPrograms
+  if (!Array.isArray(items)) {
+    items = [items];
+  }
+
+  return items
     .map((value) => {
       if (!value) return null;
 
-      // New JSON object format
-      if (
-        typeof value === 'object' &&
-        !Array.isArray(value)
-      ) {
-        const programId = String(
-          value.program_id || ''
-        ).trim();
+      const programId =
+        typeof value === 'object'
+          ? String(value.program_id || '').trim()
+          : '';
 
-        const programName = String(
-          value.program_name || ''
-        ).trim();
+      const programName =
+        typeof value === 'object'
+          ? String(
+              value.program_name ||
+              value.name ||
+              value.title ||
+              ''
+            ).trim()
+          : String(value).trim();
 
-        if (!programId && !programName) {
-          return null;
-        }
+      const matchingProgram = programs.find((program) => {
+        const sameId =
+          programId &&
+          String(program.program_id) === programId;
 
-        const matchingProgram = programs.find(
-          (program) =>
-            (
-              programId &&
-              String(program.program_id) === programId
-            ) ||
-            (
-              programName &&
-              String(program.program_name || '')
-                .trim()
-                .toLowerCase() === programName.toLowerCase()
-            )
-        );
-
-        return {
-          ...value,
-          ...(matchingProgram || {}),
-          program_id:
-            matchingProgram?.program_id || programId,
-          program_name:
-            matchingProgram?.program_name || programName,
-        };
-      }
-
-      // Old string format
-      const name = String(value).trim();
-
-      if (!name) return null;
-
-      const matchingProgram = programs.find(
-        (program) =>
+        const sameName =
+          programName &&
           String(program.program_name || '')
             .trim()
-            .toLowerCase() === name.toLowerCase()
-      );
+            .toLowerCase() === programName.toLowerCase();
 
-      if (!matchingProgram) return null;
+        return sameId || sameName;
+      });
+
+      if (!matchingProgram && !programId) {
+        return null;
+      }
 
       return {
-        ...matchingProgram,
-        program_id: matchingProgram.program_id,
-        program_name: matchingProgram.program_name,
+        ...(typeof value === 'object' ? value : {}),
+        ...(matchingProgram || {}),
+        program_id:
+          matchingProgram?.program_id || programId,
+        program_name:
+          matchingProgram?.program_name || programName,
       };
     })
-    .filter(Boolean);
+    .filter(
+      (program) =>
+        program?.program_id && program?.program_name
+    );
 };
-
   // ==================================================
   // FILTER HOUSEHOLDS
   // ==================================================
@@ -474,101 +483,74 @@ export default function Suggestions() {
   // ==================================================
 
   const eligibleHouseholds = useMemo(() => {
-    if (!selectedProgramId) {
-      return [];
-    }
+  if (!selectedProgramId) return [];
 
-    return households
-      // ----------------------------------------------
-      // PROGRAM WAS SUGGESTED FOR HOUSEHOLD
-      // ----------------------------------------------
-      .filter((household) => {
-        const suggested =
-          normalizeSuggestedPrograms(
-            household.suggested_programs
-          );
+  const priority = {
+    'Highly Vulnerable': 1,
+    'Moderately Vulnerable': 2,
+    'Low Vulnerable': 3,
+    'Not Vulnerable': 4,
+  };
 
-        return suggested.some(
-          (program) =>
-            String(
-              program.program_id
-            ) ===
-            String(selectedProgramId)
-        );
-      })
+  return households
+    .filter((household) => {
+      const suggested = normalizeSuggestedPrograms(
+        household.suggested_programs
+      );
 
-      // ----------------------------------------------
-      // VULNERABILITY FILTER
-      // ----------------------------------------------
-      .filter((household) => {
-        if (
-          !vulnerabilityFilter ||
-          vulnerabilityFilter ===
-            'All Vulnerability Levels'
-        ) {
-          return true;
-        }
+      return suggested.some(
+        (program) =>
+          String(program.program_id) ===
+          String(selectedProgramId)
+      );
+    })
+    .filter((household) => {
+      if (
+        !vulnerabilityFilter ||
+        vulnerabilityFilter === 'All Vulnerability Levels'
+      ) {
+        return true;
+      }
 
-        return (
-          String(
-            household.vulnerability || ''
-          ).toLowerCase() ===
-          String(
-            vulnerabilityFilter
-          ).toLowerCase()
-        );
-      })
+      return (
+        String(household.vulnerability || '').toLowerCase() ===
+        vulnerabilityFilter.toLowerCase()
+      );
+    })
+    .filter((household) => {
+      const existing = getProgramValidation(
+        household.household_id,
+        selectedProgramId
+      );
 
-      // ----------------------------------------------
-      // REMOVE ALREADY SUBMITTED HOUSEHOLDS
-      // ----------------------------------------------
-      .filter((household) => {
-        const existing =
-          getProgramValidation(
-            household.household_id,
-            selectedProgramId
-          );
+      return !(
+        existing &&
+        ['Pending', 'Approved'].includes(
+          String(existing.validation_status)
+        )
+      );
+    })
+    .sort((a, b) => {
+      const priorityDifference =
+        (priority[a.vulnerability] || 99) -
+        (priority[b.vulnerability] || 99);
 
-        const alreadySubmitted =
-          existing &&
-          ['Pending', 'Approved'].includes(
-            String(
-              existing.validation_status
-            )
-          );
+      if (priorityDifference !== 0) {
+        return priorityDifference;
+      }
 
-        return !alreadySubmitted;
-      })
-
-      // ----------------------------------------------
-      // PRIORITY SORT
-      // ----------------------------------------------
-      .sort((a, b) => {
-        const order = {
-          'Highly Vulnerable': 1,
-          'Moderately Vulnerable': 2,
-          'Low Vulnerable': 3,
-          'Not Vulnerable': 4,
-        };
-
-        return (
-          (order[a.vulnerability] || 99) -
-            (order[b.vulnerability] || 99) ||
-          Number(
-            a.monthly_income || 0
-          ) -
-            Number(
-              b.monthly_income || 0
-            )
-        );
-      });
-  }, [
-    households,
-    selectedProgramId,
-    vulnerabilityFilter,
-    beneficiaryStatuses,
-    programs,
-  ]);
+      return (
+        Number(a.monthly_income || 0) -
+        Number(b.monthly_income || 0)
+      );
+    });
+}, [
+  households,
+  selectedProgramId,
+  vulnerabilityFilter,
+  beneficiaryStatuses,
+  programs,
+]);
 
   // ==================================================
   // GENERATE
@@ -621,11 +603,13 @@ export default function Suggestions() {
 
     // The number input still controls how many
     // households are generated.
-    const generatedHouseholds =
-      eligibleHouseholds.slice(
-        0,
-        count
-      );
+    const safeCount = Math.min(
+  count,
+  eligibleHouseholds.length
+);
+
+const generatedHouseholds =
+  eligibleHouseholds.slice(0, safeCount);
 
     setGenerated({
       program: selectedProgram,
@@ -893,16 +877,12 @@ export default function Suggestions() {
 
           try {
             await api.post(
-              '/validation/beneficiary-validation',
-              {
-                household_id:
-                  householdId,
-                program_id:
-                  selectedProgramId,
-                validation_id:
-                  'Pending',
-              }
-            );
+  '/validation/beneficiary-validation',
+  {
+    household_id: householdId,
+    program_id: selectedProgramId,
+  }
+);
 
             saved++;
           } catch (e) {
@@ -1060,89 +1040,50 @@ export default function Suggestions() {
   // ADD ALL
   // ==================================================
 
-  const handleAddAll = () => {
-    if (!generated) return;
+ const handleAddAll = () => {
+  if (!generated) return;
 
-    setGenerated(
-      (previous) => {
-        if (!previous) {
-          return previous;
+  setGenerated((previous) => {
+    if (!previous) return previous;
+
+    const selectedIds = new Set(
+      previous.selected.map((item) =>
+        String(item.household_id)
+      )
+    );
+
+    const newItems = previous.available.filter(
+      (item) => {
+        const householdId = String(item.household_id);
+
+        if (selectedIds.has(householdId)) {
+          return false;
         }
 
-        const existingIds =
-          new Set(
-            previous.selected.map(
-              (item) =>
-                String(
-                  item.household_id
-                )
-            )
-          );
+        const existing = getProgramValidation(
+          householdId,
+          previous.program_id
+        );
 
-        const newItems =
-          previous.available.filter(
-            (item) => {
-              const householdId =
-                String(
-                  item.household_id
-                );
-
-              const existing =
-                getProgramValidation(
-                  item.household_id,
-                  previous.program_id
-                );
-
-              const alreadySubmitted =
-                existing &&
-                ['Pending', 'Approved'].includes(
-                  existing.validation_status
-                );
-
-              return (
-                !existingIds.has(
-                  householdId
-                ) &&
-                !alreadySubmitted
-              );
-            }
-          );
-
-        return {
-          ...previous,
-
-          selected: [
-            ...previous.selected,
-            ...newItems,
-          ],
-
-          available:
-            previous.available.filter(
-              (item) => {
-                const householdId =
-                  String(
-                    item.household_id
-                  );
-
-                const existing =
-                  getProgramValidation(
-                    item.household_id,
-                    previous.program_id
-                  );
-
-                const alreadySubmitted =
-                  existing &&
-                  ['Pending', 'Approved'].includes(
-                    existing.validation_status
-                  );
-
-                return alreadySubmitted;
-              }
-            ),
-        };
+        return !(
+          existing &&
+          ['Pending', 'Approved'].includes(
+            String(existing.validation_status)
+          )
+        );
       }
     );
-  };
+
+    return {
+      ...previous,
+      selected: [
+        ...previous.selected,
+        ...newItems,
+      ],
+      available: [],
+    };
+  });
+};
 
   // ==================================================
   // REMOVE ALL

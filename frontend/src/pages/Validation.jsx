@@ -187,93 +187,37 @@ function normalizeStatus(value) {
     .toLowerCase();
 }
 
-function getDisplayStatus(
-  household,
-  validationRecords = []
-) {
+function getDisplayStatus(household, validationRecords = []) {
   const householdId =
-    household?.household_id ||
-    household?.id;
+    household?.household_id || household?.id;
 
-  /*
-   * Look for beneficiary-validation records
-   * belonging to this household.
-   */
   const records = validationRecords.filter(
     (record) =>
-      String(
-        record?.household_id || ''
-      ) === String(householdId || '')
-  );
-
-  const hasApproved = records.some(
-    (record) =>
-      normalizeStatus(
-        record?.validation_status
-      ) === 'approved'
+      String(record?.household_id || '') ===
+      String(householdId || '')
   );
 
   const hasPending = records.some(
     (record) =>
-      normalizeStatus(
-        record?.validation_status
-      ) === 'pending'
+      normalizeStatus(record?.validation_status) === 'pending'
+  );
+
+  const hasApproved = records.some(
+    (record) =>
+      normalizeStatus(record?.validation_status) === 'approved'
   );
 
   const hasRejected = records.some(
     (record) =>
-      normalizeStatus(
-        record?.validation_status
-      ) === 'rejected'
+      normalizeStatus(record?.validation_status) === 'rejected'
   );
 
-  /*
-   * Approved beneficiary records are Active.
-   */
-  if (hasApproved) {
-    return 'Active';
-  }
+  if (hasPending) return 'For Approval';
+  if (hasApproved) return 'Active';
+  if (hasRejected) return 'Rejected';
 
-  /*
-   * Pending beneficiary records are
-   * waiting for Captain approval.
-   */
-  if (hasPending) {
-    return 'For Approval';
-  }
-
-  /*
-   * If records were rejected and there
-   * are no approved/pending records.
-   */
-  if (hasRejected) {
-    return 'Rejected';
-  }
-
-  /*
-   * Fallback to household status.
-   */
-  const householdStatus =
-    normalizeStatus(
-      household?.validation_status
-    );
-
-  if (
-    householdStatus === 'approved' ||
-    householdStatus === 'active'
-  ) {
-    return 'Active';
-  }
-
-  if (
-    householdStatus === 'rejected'
-  ) {
-    return 'Rejected';
-  }
-
-  return 'For Approval';
+  return 'Not Submitted';
 }
-
 /* =========================================================
    STATUS STYLE
 ========================================================= */
@@ -287,11 +231,13 @@ function statusClass(status) {
       return 'bg-red-100 text-red-700';
 
     case 'For Approval':
+      return 'bg-amber-100 text-amber-700';
+
+    case 'Not Submitted':
     default:
       return 'bg-slate-100 text-slate-500';
   }
 }
-
 /* =========================================================
    DATE
 ========================================================= */
@@ -418,50 +364,27 @@ function getCondition(household) {
    APPROVAL DATE
 ========================================================= */
 
-function getApprovalDate(
-  household,
-  validationRecords = []
-) {
+function getApprovalDate(household, validationRecords = []) {
   const householdId =
-    household?.household_id ||
-    household?.id;
+    household?.household_id || household?.id;
 
-  const approvedRecord =
-    validationRecords
-      .filter(
-        (record) =>
-          String(
-            record?.household_id || ''
-          ) === String(
-            householdId || ''
-          )
-      )
-      .filter(
-        (record) =>
-          normalizeStatus(
-            record?.validation_status
-          ) === 'approved'
-      )
-      .sort(
-        (a, b) =>
-          new Date(
-            b?.approved_at ||
-            b?.submitted_at ||
-            0
-          ) -
-          new Date(
-            a?.approved_at ||
-            a?.submitted_at ||
-            0
-          )
-      )[0];
+  const approvedRecords = validationRecords
+    .filter(
+      (record) =>
+        String(record?.household_id || '') ===
+          String(householdId || '') &&
+        normalizeStatus(record?.validation_status) === 'approved' &&
+        record?.approved_at
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.approved_at) - new Date(a.approved_at)
+    );
 
   return (
-    approvedRecord?.approved_at ||
-    household?.approved_at ||
+    approvedRecords[0]?.approved_at ||
     household?.approval_date ||
-    household?.updated_at ||
-    household?.created_at ||
+    household?.approved_at ||
     null
   );
 }
@@ -540,87 +463,61 @@ export default function Validation() {
      LOAD DATA
   ======================================================= */
 
-  useEffect(() => {
-    let cancelled = false;
+ useEffect(() => {
+  let cancelled = false;
 
-    async function loadData() {
-      try {
-        setLoading(true);
-        setError('');
+  async function loadData() {
+    try {
+      setLoading(true);
+      setError('');
 
-        /*
-         * Load both:
-         *
-         * 1. Household data
-         * 2. Beneficiary validation history
-         *
-         * Household data provides ML classification.
-         * beneficiary_validation provides Captain decisions.
-         */
-        const [
-          householdResponse,
-          validationResponse,
-        ] = await Promise.all([
+      const [householdResponse, validationResponse] =
+        await Promise.all([
           api.get('/households'),
-          api.get(
-            '/history/beneficiary-validation'
-          ),
+          api.get('/validation/beneficiary-validation/statuses'),
         ]);
 
-        if (cancelled) {
-          return;
-        }
+      if (cancelled) return;
 
-        const householdList =
-          extractArray(
-            householdResponse,
-            ['households']
-          );
+      const householdList = extractArray(
+        householdResponse,
+        ['households']
+      );
 
-        const validationList =
-          extractArray(
-            validationResponse
-          );
+      const validationList = extractArray(
+        validationResponse,
+        ['statuses', 'validations']
+      );
 
-        setHouseholds(
-          householdList
-        );
+      setHouseholds(householdList);
+      setValidationRecords(validationList);
+    } catch (e) {
+      if (cancelled) return;
 
-        setValidationRecords(
-          validationList
-        );
-      } catch (e) {
-        if (cancelled) {
-          return;
-        }
+      console.error('Failed to load validation data:', e);
 
-        console.error(
-          'Failed to load validation data:',
-          e
-        );
+      setHouseholds([]);
+      setValidationRecords([]);
 
-        setHouseholds([]);
-        setValidationRecords([]);
-
-        setError(
-          e?.response?.data?.error ||
-          e?.response?.data?.message ||
-          e?.message ||
-          'Failed to load household validation data.'
-        );
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+      setError(
+        e?.response?.data?.error ||
+        e?.response?.data?.message ||
+        e?.message ||
+        'Failed to load household validation data.'
+      );
+    } finally {
+      if (!cancelled) {
+        setLoading(false);
       }
     }
+  }
 
-    loadData();
+  loadData();
 
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  return () => {
+    cancelled = true;
+  };
+}, []);
 
   /* =======================================================
      PRIORITIES
@@ -877,64 +774,36 @@ export default function Validation() {
     /*
      * Approvals made today.
      */
-    const today =
-      new Date();
+    const today = new Date();
 
-    const approvalToday =
-      approvedRecords.filter(
-        (record) => {
-          const value =
-            record?.approved_at ||
-            record?.submitted_at;
+const approvalToday = approvedRecords.filter((record) => {
+  if (!record?.approved_at) return false;
 
-          if (!value) {
-            return false;
-          }
+  const date = new Date(record.approved_at);
 
-          const date =
-            new Date(value);
+  return (
+    !Number.isNaN(date.getTime()) &&
+    date.toDateString() === today.toDateString()
+  );
+}).length;
 
-          return (
-            !Number.isNaN(
-              date.getTime()
-            ) &&
-            date.toDateString() ===
-              today.toDateString()
-          );
-        }
-      ).length;
+const latestApproval = [...approvedRecords]
+  .filter((record) => record?.approved_at)
+  .sort(
+    (a, b) =>
+      new Date(b.approved_at) - new Date(a.approved_at)
+  )[0];
 
-    /*
-     * Find the Captain who made
-     * the latest approval.
-     */
-    const latestApproval =
-      [...approvedRecords]
-        .sort(
-          (a, b) =>
-            new Date(
-              b?.approved_at ||
-              b?.submitted_at ||
-              0
-            ) -
-            new Date(
-              a?.approved_at ||
-              a?.submitted_at ||
-              0
-            )
-        )[0];
+return {
+  awaitingReview,
+  highPriority,
+  approvalToday,
+  approvalPercent,
+  approvedRecords,
+  rejectedRecords,
+  captain: latestApproval?.approved_by_name || 'Captain',
+};
 
-    return {
-      awaitingReview,
-      highPriority,
-      approvalToday,
-      approvalPercent,
-      approvedRecords,
-      rejectedRecords,
-      captain:
-        latestApproval?.approved_by_name ||
-        'Barangay Captain',
-    };
   }, [
     households,
     validationRecords,
@@ -1359,7 +1228,7 @@ export default function Validation() {
                       text-left
                     "
                   >
-                    DATE
+                    APPROVAL DATE
                   </th>
 
                   <th
