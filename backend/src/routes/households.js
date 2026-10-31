@@ -255,12 +255,10 @@ async function updateById(
 
 async function refreshHouseholdPrediction(householdId) {
   const rows = await query(
-    `
-      SELECT *
-      FROM households
-      WHERE household_id = $1
-      LIMIT 1
-    `,
+    `SELECT *
+     FROM households
+     WHERE household_id = $1
+     LIMIT 1`,
     [householdId]
   );
 
@@ -268,23 +266,19 @@ async function refreshHouseholdPrediction(householdId) {
     throw new Error('Household not found.');
   }
 
-  const household = rows[0];
-
-  const prediction = await predictHousehold(household);
+  const prediction = await predictHousehold(rows[0]);
 
   await query(
-    `
-      UPDATE households
-      SET
-        vulnerability = $1,
-        vulnerability_prob = $2,
-        suggested_programs = $3
-      WHERE household_id = $4
-    `,
+    `UPDATE households
+     SET
+       vulnerability = $1,
+       vulnerability_prob = $2,
+       suggested_programs = $3
+     WHERE household_id = $4`,
     [
       prediction.vulnerability,
       prediction.vulnerability_prob,
-      prediction.suggested_programs,
+      JSON.stringify(prediction.suggested_programs || []),
       householdId,
     ]
   );
@@ -945,6 +939,15 @@ router.post(
         `Added member "${rows[0].full_name}".`
       );
 
+      try {
+  await refreshHouseholdPrediction(req.params.id);
+} catch (mlError) {
+  console.error(
+    'Member added, but ML prediction refresh failed:',
+    mlError
+  );
+}
+
       res.status(201).json({
         member: rows[0],
       });
@@ -1039,6 +1042,15 @@ router.put(
         `Updated member "${member.full_name}".`
       );
 
+      try {
+  await refreshHouseholdPrediction(member.household_id);
+} catch (mlError) {
+  console.error(
+    'Member updated, but ML prediction refresh failed:',
+    mlError
+  );
+}
+
       res.json({ member });
     } catch (error) {
       console.error(
@@ -1067,7 +1079,7 @@ router.delete(
         `
           DELETE FROM household_members
           WHERE member_id = $1
-          RETURNING full_name
+          RETURNING full_name, household_id
         `,
         [req.params.memberId]
       );
@@ -1083,6 +1095,14 @@ router.delete(
         'DELETE_MEMBER',
         `Removed member "${rows[0].full_name}".`
       );
+
+      const deletedMember = rows[0];
+
+try {
+  await refreshHouseholdPrediction(deletedMember.household_id);
+} catch (mlError) {
+  console.error('Failed to refresh prediction after deleting member:', mlError);
+} 
 
       res.json({ success: true });
     } catch (error) {

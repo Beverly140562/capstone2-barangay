@@ -459,14 +459,6 @@ def filter_records(
 # ANALYTICS
 # ============================================================
 
-# ============================================================
-# ANALYTICS
-# ============================================================
-
-
-# ============================================================
-# ANALYTICS
-# ============================================================
 
 @app.get("/analytics")
 def analytics(
@@ -620,13 +612,6 @@ def analytics(
 # PROGRAM MATCHING
 # ============================================================
 
-# ============================================================
-# PROGRAM MATCHING
-# ============================================================
-
-# ============================================================
-# PROGRAM MATCHING
-# ============================================================
 
 def normalize_rule(value: str | None) -> str:
     if not value:
@@ -877,155 +862,6 @@ def predict_one(
 
         "suggested_programs": suggested_programs,
 
-        "probabilities": probability_result,
-    }
-
- # ============================================================
-# COLAB RANDOM FOREST PREDICTION
-# ============================================================
-# ============================================================
-# COLAB RANDOM FOREST PREDICTION
-# ============================================================
-
-def display_vulnerability(label: str) -> str:
-
-    mapping = {
-        "High": "Highly Vulnerable",
-        "Medium": "Moderately Vulnerable",
-        "Low": "Low Vulnerable",
-    }
-
-    return mapping.get(label, label)
-
-
-
-def predict_one(row: Household, programs=None):
-    ensure_model_loaded()
-
-    programs = programs or []
-
-    # Determine household size
-    family_size = (
-        row.family_size
-        if row.family_size is not None
-        else row.family_number
-    )
-
-    # Prepare Random Forest input
-    input_df = pd.DataFrame([{
-        "member_count": row.member_count,
-        "head_education": row.head_education,
-        "household_monthly_income": row.monthly_income,
-        "family_size": family_size,
-        "all_members_explicitly_unemployed":
-            row.all_members_explicitly_unemployed,
-        "provisional_disability_indicator":
-            row.provisional_disability_indicator,
-        "illness_indicator": row.illness_indicator,
-    }])
-
-    # Random Forest prediction
-    prediction = _model.predict(input_df)[0]
-    probabilities = _model.predict_proba(input_df)[0]
-    classes = _model.classes_
-
-    probability_result = {
-        str(label): round(float(prob), 4)
-        for label, prob in zip(classes, probabilities)
-    }
-
-    # Original Random Forest classification
-    rf_vulnerability = display_vulnerability(str(prediction))
-
-    rf_probability = round(
-        float(max(probabilities)), 4
-    )
-
-    # Default classification
-    vulnerability = rf_vulnerability
-    suggested_programs = []
-    classification_source = "Random Forest"
-
-    income = row.monthly_income
-
-    # ========================================================
-    # INCOME-BASED CLASSIFICATION
-    # ========================================================
-
-    if income is not None:
-
-        # Below ₱10,000 = Highly Vulnerable
-        if income < 10000:
-
-            vulnerability = "Highly Vulnerable"
-            classification_source = "Income-based rule"
-
-            suggested_programs = match_programs(
-                row,
-                vulnerability,
-                programs
-            )
-
-        # ₱10,000 to ₱24,000 = Moderately Vulnerable
-        elif 10000 <= income <= 24000:
-
-            vulnerability = "Moderately Vulnerable"
-            classification_source = "Income-based rule"
-
-            suggested_programs = match_programs(
-                row,
-                vulnerability,
-                programs
-            )
-
-        # ₱25,000 and above = Low Vulnerable
-        elif income >= 25000:
-
-            vulnerability = "Low Vulnerable"
-            classification_source = "Income-based rule"
-
-            suggested_programs = []
-
-            # Special 4Ps exception:
-            # Monthly income >= ₱25,000
-            # AND more than 5 household members.
-            if family_size is not None and family_size > 5:
-
-                for program in programs:
-
-                    program_name = (
-                        program.program_name.lower()
-                    )
-
-                    if (
-                        "4ps" in program_name
-                        or "pantawid pamilya" in program_name
-                    ):
-                        # Keep the same string format
-                        # returned by match_programs().
-                        suggested_programs.append(
-                            program.program_name
-                        )
-
-    # ========================================================
-    # RESPONSE
-    # ========================================================
-
-    return {
-        "vulnerability": vulnerability,
-        "vulnerability_prob": rf_probability,
-
-        # Preserve original Random Forest result
-        "rf_vulnerability": rf_vulnerability,
-        "rf_vulnerability_prob": rf_probability,
-
-        "classification_source": classification_source,
-
-        "program_eligible": (
-            True if suggested_programs else None
-        ),
-
-        "suggested_programs": suggested_programs,
         "probabilities": probability_result,
     }
 
