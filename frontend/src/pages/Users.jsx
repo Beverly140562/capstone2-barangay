@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { PageHeader, Band, Table, Status, Spinner, Button, Input, Select } from '../components/ui';
+import { RefreshCw } from 'lucide-react';
 
 export default function Users() {
   const [users, setUsers] = useState([]);
@@ -108,24 +109,27 @@ useEffect(() => {
             </Table>
           </Band>
 
-          <Band title="Staff and Captain Activity Logs">
+          <Band title="Activity Logs Monitoring">
   <div className="flex items-center justify-between border-b border-gray-100 p-4">
     <div>
-      <p className="font-semibold text-gray-800">
-        User Activity Monitoring
-      </p>
-      <p className="text-sm text-gray-500">
-        Monitor recent actions performed by Staff and Captain.
+      <p className="font-semibold text-xl text-gray-800">
       </p>
     </div>
 
-    <Button
-      variant="outline"
-      onClick={loadActivityLogs}
-      disabled={activityLoading}
-    >
-      {activityLoading ? 'Loading...' : 'Refresh Logs'}
-    </Button>
+    <button
+    type="button"
+    onClick={loadActivityLogs}
+    disabled={activityLoading}
+    className="rounded-lg bg-[#6E2430] px-4 py-2 text-white hover:bg-[#581c26] disabled:opacity-50"
+  >
+    <RefreshCw
+      size={30}
+      className={`inline mr-2 ${
+        activityLoading ? 'animate-spin' : ''
+      }`}
+    />
+    {activityLoading ? 'Refreshing...' : 'Refresh '}
+  </button>
   </div>
 
   {activityError && (
@@ -139,11 +143,11 @@ useEffect(() => {
       No activity logs found.
     </p>
   ) : (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left">
-        <thead className="bg-gray-50">
-          <tr className="text-sm text-gray-500">
-            <th className="px-4 py-3">User</th>
+    <div className="max-h-[510px] w-full overflow-y-auto overflow-x-auto">
+  <table className="w-full text-left">
+    <thead className="sticky top-0 z-10 bg-gray-100">
+          <tr className="text-2xl text-gray-500">
+            <th className="px-4 py-3">Name</th>
             <th className="px-4 py-3">Role</th>
             <th className="px-4 py-3">Action</th>
             <th className="px-4 py-3">Description</th>
@@ -155,32 +159,28 @@ useEffect(() => {
           {activityLogs.map((log) => (
             <tr
               key={log.log_id}
-              className="border-b border-gray-100 hover:bg-gray-50"
+              className="border-b border-gray-100 hover:bg-gray-50 "
             >
-              <td className="px-4 py-3 font-medium text-gray-800">
+              <td className="px-4 py-3 font-medium text-2xl text-gray-800">
                 {log.user_name || 'Unknown User'}
-                {log.username && (
-                  <p className="text-xs text-gray-500">
-                    @{log.username}
-                  </p>
-                )}
+                
               </td>
 
               <td className="px-4 py-3">
-                <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold capitalize text-blue-700">
+                <span className="rounded-full bg-blue-100 px-3 py-1 text-xl font-semibold capitalize text-blue-700">
                   {log.user_role || 'Unknown'}
                 </span>
               </td>
 
-              <td className="px-4 py-3 font-semibold text-[#6E2430]">
+              <td className="px-4 py-3 font-semibold text-xl text-[#6E2430]">
                 {log.action || '—'}
               </td>
 
-              <td className="max-w-sm px-4 py-3 text-gray-600">
+              <td className="max-w-sm text-2xl px-4 py-3 text-gray-600">
                 {log.activity_description || 'No description'}
               </td>
 
-              <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
+              <td className="whitespace-nowrap px-4 py-3 text-2xl text-gray-600">
                 {log.timestamp
                   ? new Date(log.timestamp).toLocaleString('en-PH', {
                       year: 'numeric',

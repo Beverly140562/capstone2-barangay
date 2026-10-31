@@ -923,7 +923,7 @@ return {
           >
             <div
               className="
-                text-lg
+                text-xl
                 font-semibold
                 tracking-wide
                 text-slate-500
@@ -932,14 +932,14 @@ return {
               FLAGGED HOUSEHOLD
             </div>
 
-            <div className="mt-1 text-3xl font-bold">
+            <div className="mt-1 text-4xl font-bold">
               {stats.awaitingReview}
             </div>
 
             <div
               className="
                 mt-1
-                text-lg
+                text-2xl
                 font-medium
                 text-emerald-600
               "
@@ -971,14 +971,14 @@ return {
               HIGH PRIORITY
             </div>
 
-            <div className="mt-1 text-3xl font-bold">
+            <div className="mt-1 text-4xl font-bold">
               {stats.highPriority}
             </div>
 
             <div
               className="
                 mt-1
-                text-lg
+                text-2xl
                 font-medium
                 text-emerald-600
               "
@@ -1001,7 +1001,7 @@ return {
           >
             <div
               className="
-                text-lg
+                text-xl
                 font-semibold
                 tracking-wide
                 text-slate-500
@@ -1010,14 +1010,14 @@ return {
               APPROVAL TODAY
             </div>
 
-            <div className="mt-1 text-3xl font-bold">
+            <div className="mt-1 text-4xl font-bold">
               {stats.approvalToday}
             </div>
 
             <div
               className="
                 mt-1
-                text-lg
+                text-2xl
                 font-medium
                 text-emerald-600
               "
@@ -1040,7 +1040,7 @@ return {
           >
             <div
               className="
-                text-lg
+                text-xl
                 font-semibold
                 tracking-wide
                 text-slate-500
@@ -1049,14 +1049,14 @@ return {
               APPROVAL %
             </div>
 
-            <div className="mt-1 text-3xl font-bold">
+            <div className="mt-1 text-4xl font-bold">
               {stats.approvalPercent}%
             </div>
 
             <div
               className="
                 mt-1
-                text-lg
+                text-2xl
                 font-medium
                 text-emerald-600
               "
