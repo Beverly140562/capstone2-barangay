@@ -197,18 +197,19 @@ export default function CreateProgram() {
 
       toast.success('Assistance program created successfully.');
 navigate('/programs');
-    } catch (err) {
-      console.toast.error(
-  err?.response?.data?.error ||
-    err?.message ||
-    (isEditing
-      ? 'Failed to update assistance program.'
-      : 'Failed to create assistance program.')
-);
+    } catch (error) {
+  console.error('Create Program Error:', error);
 
-    } finally {
-      setSaving(false);
-    }
+  const message =
+    error?.response?.data?.error ||
+    error?.data?.error ||
+    error?.message ||
+    'Failed to create assistance program.';
+
+  toast.error(message);
+} finally {
+  setSaving(false);
+}
   };
 
   return (

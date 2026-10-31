@@ -44,7 +44,6 @@ router.get('/', async (req, res) => {
         ) AS total_approved_households
 
       FROM assistance_programs p
-      WHERE is_active = TRUE
       ORDER BY p.created_at DESC
     `);
 
@@ -81,42 +80,64 @@ router.post(
         is_active,
       } = req.body || {};
 
+      // Validate program name
       if (
-        !program_name ||
+        typeof program_name !== 'string' ||
         !program_name.trim()
       ) {
         return res.status(400).json({
-          error: 'program_name is required.',
+          error: 'Program name is required.',
         });
       }
 
+      // Get the authenticated user's ID.
+      // Confirm the correct property in your auth middleware.
+      const userId =
+        req.user?.user_id ??
+        req.user?.id ??
+        req.user?.users;
+
+      if (!userId) {
+        return res.status(401).json({
+          error: 'Unable to identify the logged-in user.',
+        });
+      }
+
+      const active =
+        typeof is_active === 'boolean'
+          ? is_active
+          : true;
+
       const rows = await query(
         `
-        INSERT INTO assistance_programs
-          (
-            user_id,
-            program_name,
-            description,
-            eligibility_rules,
-            is_active
-          )
-        VALUES
-          ($1, $2, $3, $4)
+        INSERT INTO assistance_programs (
+          user_id,
+          program_name,
+          description,
+          eligibility_rules,
+          is_active
+        )
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *
         `,
-        [
-          req.user.users,
-          program_name.trim(),
-          description?.trim() || null,
-          eligibility_rules?.trim() || null,
-        ]
+        
+  [
+  userId,
+  program_name.trim(),
+  description?.trim() || null,
+  eligibility_rules?.trim() || null,
+  is_active ?? true,
+]
       );
 
+      const createdProgram = rows[0];
+
+      // Activity logging should not undo a successful insert.
       try {
         await logActivity(
           req,
           'CREATE_PROGRAM',
-          `Created assistance program "${program_name.trim()}".`
+          `Created assistance program "${createdProgram.program_name}".`
         );
       } catch (logError) {
         console.error(
@@ -126,7 +147,9 @@ router.post(
       }
 
       return res.status(201).json({
-        program: rows[0],
+        success: true,
+        message: 'Assistance program created successfully.',
+        program: createdProgram,
       });
     } catch (error) {
       console.error(
@@ -135,9 +158,11 @@ router.post(
       );
 
       return res.status(500).json({
-        error:
-          error.message ||
-          'Failed to create assistance program.',
+        error: 'Failed to create assistance program.',
+        details:
+          process.env.NODE_ENV === 'production'
+            ? undefined
+            : error.message,
       });
     }
   }
