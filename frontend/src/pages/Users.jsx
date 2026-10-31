@@ -8,11 +8,35 @@ export default function Users() {
   const [editing, setEditing] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [activityLogs, setActivityLogs] = useState([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState('');
+
+  const loadActivityLogs = async () => {
+  try {
+    setActivityLoading(true);
+    setActivityError('');
+
+    const response = await api.get('/users/activity-logs');
+
+    setActivityLogs(
+      Array.isArray(response?.logs) ? response.logs : []
+    );
+  } catch (err) {
+    console.error('Failed to load activity logs:', err);
+    setActivityError(err.message || 'Failed to load activity logs.');
+  } finally {
+    setActivityLoading(false);
+  }
+};
 
   const load = () => {
     api.get('/users').then((d) => setUsers(d.users)).catch((e) => setError(e.message)).finally(() => setLoading(false));
   };
-  useEffect(load, []);
+useEffect(() => {
+  load();
+  loadActivityLogs();
+}, []);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -83,6 +107,97 @@ export default function Users() {
               ))}
             </Table>
           </Band>
+
+          <Band title="Staff and Captain Activity Logs">
+  <div className="flex items-center justify-between border-b border-gray-100 p-4">
+    <div>
+      <p className="font-semibold text-gray-800">
+        User Activity Monitoring
+      </p>
+      <p className="text-sm text-gray-500">
+        Monitor recent actions performed by Staff and Captain.
+      </p>
+    </div>
+
+    <Button
+      variant="outline"
+      onClick={loadActivityLogs}
+      disabled={activityLoading}
+    >
+      {activityLoading ? 'Loading...' : 'Refresh Logs'}
+    </Button>
+  </div>
+
+  {activityError && (
+    <p className="p-4 text-red-600">{activityError}</p>
+  )}
+
+  {activityLoading ? (
+    <Spinner />
+  ) : activityLogs.length === 0 ? (
+    <p className="p-6 text-center text-gray-500">
+      No activity logs found.
+    </p>
+  ) : (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left">
+        <thead className="bg-gray-50">
+          <tr className="text-sm text-gray-500">
+            <th className="px-4 py-3">User</th>
+            <th className="px-4 py-3">Role</th>
+            <th className="px-4 py-3">Action</th>
+            <th className="px-4 py-3">Description</th>
+            <th className="px-4 py-3">Date and Time</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {activityLogs.map((log) => (
+            <tr
+              key={log.log_id}
+              className="border-b border-gray-100 hover:bg-gray-50"
+            >
+              <td className="px-4 py-3 font-medium text-gray-800">
+                {log.user_name || 'Unknown User'}
+                {log.username && (
+                  <p className="text-xs text-gray-500">
+                    @{log.username}
+                  </p>
+                )}
+              </td>
+
+              <td className="px-4 py-3">
+                <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold capitalize text-blue-700">
+                  {log.user_role || 'Unknown'}
+                </span>
+              </td>
+
+              <td className="px-4 py-3 font-semibold text-[#6E2430]">
+                {log.action || '—'}
+              </td>
+
+              <td className="max-w-sm px-4 py-3 text-gray-600">
+                {log.activity_description || 'No description'}
+              </td>
+
+              <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
+                {log.timestamp
+                  ? new Date(log.timestamp).toLocaleString('en-PH', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })
+                  : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
+</Band>
         </>
       )}
     </div>

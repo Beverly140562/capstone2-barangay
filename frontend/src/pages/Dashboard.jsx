@@ -60,17 +60,11 @@ function Tile({ to, title, desc, icon }) {
 ========================================================================== */
 
 function programsText(programs) {
-  if (
-    programs === null ||
-    programs === undefined ||
-    programs === ''
-  ) {
-    return '—';
-  }
+  if (!programs) return '—';
 
   let items = programs;
 
-  // Parse JSON strings when possible
+  // Parse a JSON string containing an array.
   if (typeof items === 'string') {
     const value = items.trim();
 
@@ -79,29 +73,41 @@ function programsText(programs) {
     try {
       items = JSON.parse(value);
     } catch {
-      // Treat it as ordinary comma-separated text
-      return value
-        .replace(/^\s*\{\s*/, '')
-        .replace(/\s*\}\s*$/, '')
-        .replace(/"/g, '')
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean)
-        .join(', ') || '—';
+      return value;
     }
   }
 
-  // Convert a single item into an array
   if (!Array.isArray(items)) {
     items = [items];
   }
 
   const names = items
     .map((item) => {
+      // Handle an array item that is itself a JSON string.
       if (typeof item === 'string') {
-        return item.trim();
+        const value = item.trim();
+
+        if (!value) return '';
+
+        try {
+          const parsed = JSON.parse(value);
+
+          if (parsed && typeof parsed === 'object') {
+            return (
+              parsed.program_name ||
+              parsed.name ||
+              parsed.title ||
+              ''
+            );
+          }
+        } catch {
+          // Ordinary program name.
+        }
+
+        return value;
       }
 
+      // Handle an object directly.
       if (item && typeof item === 'object') {
         return (
           item.program_name ||
@@ -117,7 +123,6 @@ function programsText(programs) {
 
   return names.length ? names.join(', ') : '—';
 }
-
 /* ==========================================================================
    VULNERABILITY
 ========================================================================== */

@@ -22,7 +22,7 @@ export function Band({ title, subtitle, action, children, className = '' }) {
         </div>
         {action}
       </div>
-      <div className=" mt-4">{children}</div>
+      <div className="">{children}</div>
     </div>
   );
 }
@@ -128,7 +128,7 @@ export function Button({ children, variant = 'primary', ...props }) {
 
 export function Table({ head, children }) {
   return (
-    <div className="max-h-[530px] overflow-y-auto overflow-x-auto rounded-lg">
+    <div className="max-h-[500px] rounded-lg">
       <table className="w-full min-w-[1000px] text-xl text-left text-gray-900 border border-gray-300">
         
         <thead className="sticky top-0 z-20 bg-[#FFD7D7] w-full">

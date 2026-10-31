@@ -111,4 +111,41 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+
+// GET /users/activity-logs
+router.get(
+  '/activity-logs',
+  requireRole('admin'),
+  async (req, res) => {
+    try {
+      const result = await query(
+        `SELECT
+            al.log_id,
+            al.user_id,
+            COALESCE(u.full_name, 'Deleted User') AS user_name,
+            u.username,
+            COALESCE(u.roles, 'Former User') AS user_role,
+            al.action,
+            al.activity_description,
+            al.timestamp
+         FROM activity_logs al
+         LEFT JOIN users u
+           ON al.user_id = u.user_id
+         WHERE LOWER(COALESCE(u.roles, '')) IN ('staff', 'captain')
+            OR al.user_id IS NULL
+         ORDER BY al.timestamp DESC
+         LIMIT 500`
+      );
+
+      res.json({ logs: result });
+    } catch (error) {
+      console.error('Activity logs error:', error);
+
+      res.status(500).json({
+        message: 'Failed to load activity logs.'
+      });
+    }
+  }
+);
+
 module.exports = router;

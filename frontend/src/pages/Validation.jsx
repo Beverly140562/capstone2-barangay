@@ -62,62 +62,90 @@ function Dropdown({
    ARRAY / PROGRAM HELPERS
 ========================================================= */
 
+
 function normalizePrograms(programs) {
   if (!programs) {
     return [];
   }
 
+  // Handle arrays.
   if (Array.isArray(programs)) {
     return programs
-      .filter(Boolean)
-      .map((item) => String(item).trim())
+      .map((item) => {
+        if (!item) return '';
+
+        // Handle JSON objects.
+        if (typeof item === 'object') {
+          return String(
+            item.program_name || item.name || ''
+          ).trim();
+        }
+
+        // Handle JSON strings.
+        if (typeof item === 'string') {
+          const value = item.trim();
+
+          if (!value) return '';
+
+          try {
+            const parsed = JSON.parse(value);
+
+            if (parsed && typeof parsed === 'object') {
+              return String(
+                parsed.program_name || parsed.name || ''
+              ).trim();
+            }
+          } catch {
+            // Treat it as an ordinary program name.
+          }
+
+          return value;
+        }
+
+        return '';
+      })
       .filter(Boolean);
   }
 
+  // Handle a JSON array or ordinary string.
   if (typeof programs === 'string') {
     const value = programs.trim();
 
-    if (!value) {
-      return [];
-    }
+    if (!value) return [];
 
-    /*
-     * Handle JSON array stored as text.
-     */
-    if (
-      value.startsWith('[') &&
-      value.endsWith(']')
-    ) {
-      try {
-        const parsed = JSON.parse(value);
+    try {
+      const parsed = JSON.parse(value);
 
-        if (Array.isArray(parsed)) {
-          return parsed
-            .filter(Boolean)
-            .map((item) => String(item).trim())
-            .filter(Boolean);
-        }
-      } catch (error) {
-        // Continue with normal string handling.
+      if (Array.isArray(parsed)) {
+        return normalizePrograms(parsed);
       }
+
+      if (parsed && typeof parsed === 'object') {
+        return normalizePrograms([parsed]);
+      }
+    } catch {
+      // Continue with ordinary string handling.
     }
 
-    /*
-     * Handle comma-separated programs.
-     */
     return value
       .split(',')
       .map((item) => item.trim())
       .filter(Boolean);
   }
 
-  return [String(programs)];
+  // Handle a single program object.
+  if (typeof programs === 'object') {
+    const name = programs.program_name || programs.name;
+    return name ? [String(name).trim()] : [];
+  }
+
+  return [];
 }
 
 function formatPrograms(programs) {
   const values = normalizePrograms(programs);
 
-  return values.length
+  return values.length > 0
     ? values.join(', ')
     : '—';
 }

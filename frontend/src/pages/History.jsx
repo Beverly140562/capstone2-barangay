@@ -15,8 +15,10 @@ import {
 import { api } from '../lib/api';
 import {useNavigate} from 'react-router-dom';
 
+import { useAuth } from '../context/AuthContext';
 
 function History() {
+  const { user } = useAuth();
   const [history, setHistory] = useState([]);
   const [releases, setReleases] = useState([]);
   const [releaseError, setReleaseError] = useState('');
@@ -284,13 +286,15 @@ const getDecisionMaker = (program) => {
 
         </div>
 
-        <button
-          type="button"
-          onClick={() => navigate('/distribution-program')}
-          className="w-fit rounded-lg bg-[#6E2430] px-4 py-2 font-medium text-xl text-white transition hover:bg-[#581c26]"
-        >
-          + Manage Distribution
-        </button>
+        {user?.role?.toLowerCase() === 'staff' && (
+  <button
+    type="button"
+    onClick={() => navigate('/distribution-program')}
+    className="w-fit rounded-lg bg-[#6E2430] px-4 py-2 font-medium text-xl text-white transition hover:bg-[#581c26]"
+  >
+    + Manage Distribution
+  </button>
+)}
 
         <button
           type="button"
