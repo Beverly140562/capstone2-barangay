@@ -1178,7 +1178,7 @@ return {
               TABLE
           ================================================= */}
 
-          <div className="max-h-[500px] overflow-y-auto overflow-x-auto">
+          <div className="max-h-[500px] overflow-auto scrollbar-hide">
 
             <table className="w-full text-lg">
 

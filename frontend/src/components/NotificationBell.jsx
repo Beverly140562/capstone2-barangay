@@ -312,7 +312,7 @@ const loadUnreadCount = async () => {
             </div>
 
             {/* Notification List */}
-            <div className="max-h-[450px] overflow-y-auto">
+            <div className="max-h-[450px] overflow-y-auto scrollbar-hide">
 
               {notifications.length === 0 ? (
                 <div className="px-6 py-12 text-center text-gray-500">

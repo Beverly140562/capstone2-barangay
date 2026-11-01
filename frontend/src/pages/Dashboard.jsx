@@ -1387,7 +1387,7 @@ export default function Dashboard() {
 
             <div className="flex items-center justify-between bg-maroon px-5 py-3">
 
-              <span className="text-lg font-extrabold text-white">
+              <span className="text-xl font-bold text-white">
                 Priority Beneficiaries — Pending Approval
               </span>
 
@@ -1400,7 +1400,7 @@ export default function Dashboard() {
 
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto scrollbar-hide">
 
               <Table
                 head={[
@@ -1480,7 +1480,7 @@ export default function Dashboard() {
 
             <div className="flex items-center justify-between bg-maroon px-5 py-3">
 
-              <span className="text-lg font-extrabold text-white">
+              <span className="text-xl font-bold text-white">
                 Approved Household Beneficiaries
               </span>
 
@@ -1493,7 +1493,7 @@ export default function Dashboard() {
 
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto scrollbar-hide">
 
               <Table
                 head={[

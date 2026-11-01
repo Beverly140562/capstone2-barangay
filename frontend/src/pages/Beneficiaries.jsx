@@ -886,7 +886,7 @@ export default function Beneficiaries() {
 
           <Band title="Approved Household Beneficiaries">
 
-  <div className="max-h-[500px] overflow-y-auto overflow-x-auto rounded-lg">
+  <div className="max-h-[500px] overflow-auto scrollbar-hide">
 
     <Table
       head={[

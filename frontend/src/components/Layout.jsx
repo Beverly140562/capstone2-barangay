@@ -70,7 +70,7 @@ export default function Layout({ children }) {
           <div className="text-3xl font-bold"><img src="/blpic-logo.png" alt="BLPIC-HD Logo" className="w-12 h-12 mr-3 inline-block" /> BLPIC-HD</div>
           <div className="text-sm mt-3 text-white text-[18px]">Intelligence Barangay Profiling</div>
         </Link>
-        <nav className="flex-1 overflow-y-auto py-4">
+        <nav className="flex-1 overflow-y-auto py-4 scrollbar-hide">
           {groups.map((g) => (
             <div key={g.section} className="mb-4">
               <div className=" px-8 text-[14px] font-medium tracking-wide text-[#C0BEBE] uppercase">{g.section}</div>

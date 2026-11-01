@@ -143,7 +143,7 @@ useEffect(() => {
       No activity logs found.
     </p>
   ) : (
-    <div className="max-h-[510px] w-full overflow-y-auto overflow-x-auto">
+    <div className="max-h-[510px] w-full overflow-y-auto overflow-x-auto scrollbar-hide">
   <table className="w-full text-left">
     <thead className="sticky top-0 z-10 bg-gray-100">
           <tr className="text-2xl text-gray-500">

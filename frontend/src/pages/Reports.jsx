@@ -947,7 +947,7 @@ function AnalyticsSummary({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4 mt-4">
         {cards.map(
           (card) => (
             <div
@@ -997,14 +997,14 @@ function AnalyticsSummary({
 function ReadOnlyRowsTable({
   rows,
   type = 'households',
-  minWidth = 900,
+  minWidth = 1200,
   maxHeight = false,
 }) {
   const columns = getReportColumns(type);
 
   return (
     <div
-      className={`overflow-x-auto rounded-lg border ${
+      className={`overflow-x-auto rounded-lg border scrollbar-hide ${
         maxHeight ? 'max-h-[500px] overflow-y-auto' : ''
       }`}
     >
@@ -1024,7 +1024,7 @@ function ReadOnlyRowsTable({
         </thead>
         <tbody>
           {rows.map((row, index) => (
-            <tr key={getRecordKey(row, index)} className="border-t text-sm">
+            <tr key={getRecordKey(row, index)} className="border-t text-xl hover:bg-gray-100">
               <td className="px-4 py-3">{index + 1}</td>
               {columns.map((column) => (
                 <td key={column.header} className="px-4 py-3">
@@ -1057,7 +1057,7 @@ function InfoBox({
         {label}
       </p>
 
-      <p className="mt-1 text-xl font-semibold">
+      <p className="mt-1 text-2xl font-semibold">
         {children}
       </p>
 
@@ -3023,7 +3023,7 @@ try {
           <Band
             title={`Select Records (${selectedRecords.length} selected)`}
           >
-            <div className="mb-4 flex flex-wrap items-center gap-3">
+            <div className="mb-4 mt-5 flex flex-wrap items-center gap-3">
               <Button
                 type="button"
                 variant="maroon"
@@ -3064,7 +3064,7 @@ try {
               </Button>
             </div>
 
-            <div className="max-h-[500px] overflow-x-auto overflow-y-auto rounded-lg border border-gray-200">
+            <div className="max-h-[500px] overflow-x-auto overflow-y-auto rounded-lg border border-gray-200 scrollbar-hide">
               <table className="w-full text-left">
                 <thead className="sticky top-0 z-20 bg-[#FFD7D7]">
                   <tr className="border-b text-2xl font-semibold text-[#6E2430]">
@@ -3183,7 +3183,7 @@ try {
         <Spinner />
       ) : (
         <Band title="Report History">
-          <div className="overflow-y-auto rounded-lg">
+          <div className="overflow-y-auto rounded-lg scrollbar-hide">
             <Table
               head={[
                 'Report Name',
@@ -3291,7 +3291,7 @@ try {
 
       {showPreview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="flex max-h-[90vh] w-full max-w-7xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+          <div className="flex max-h-[90vh] w-full max-w-[90vw] flex-col overflow-hidden rounded-xl bg-white shadow-2xl scrollbar-hide">
             <div className="flex items-center justify-between border-b bg-[#6E2430] px-6 py-4 text-white">
               <div>
                 <h2 className="text-3xl font-bold">
@@ -3318,8 +3318,8 @@ try {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
+            <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+              <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4 ">
                 <InfoBox label="REPORT TYPE">
                   {getReportLabel(
                     type
@@ -3400,7 +3400,7 @@ try {
 
       {viewingReport && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-          <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+          <div className="flex max-h-[90vh] w-full max-w-[80vw] flex-col overflow-hidden rounded-xl bg-white shadow-2xl scrollbar-hide">
             <div className="flex items-center justify-between bg-[#6E2430] px-6 py-4 text-white">
               <div>
                 <h2 className="text-2xl font-bold">
@@ -3427,7 +3427,7 @@ try {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
               <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
                 <InfoBox label="REPORT TYPE">
                   {getReportLabel(
@@ -3462,7 +3462,7 @@ try {
 
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                     <div>
-                      <p className="text-sm font-bold text-gray-500">
+                      <p className="text-xl font-bold text-gray-500">
                         DATE RANGE
                       </p>
 
@@ -3473,7 +3473,7 @@ try {
                     </div>
 
                     <div>
-                      <p className="text-sm font-bold text-gray-500">
+                      <p className="text-xl font-bold text-gray-500">
                         PUROK
                       </p>
 
@@ -3484,7 +3484,7 @@ try {
                     </div>
 
                     <div>
-                      <p className="text-sm font-bold text-gray-500">
+                      <p className="text-xl font-bold text-gray-500">
                         START DATE
                       </p>
 
@@ -3498,7 +3498,7 @@ try {
                     </div>
 
                     <div>
-                      <p className="text-sm font-bold text-gray-500">
+                      <p className="text-xl font-bold text-gray-500">
                         END DATE
                       </p>
 

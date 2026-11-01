@@ -286,7 +286,7 @@ const getDecisionMaker = (program) => {
 
         </div>
 
-        {user?.role?.toLowerCase() === 'staff' && (
+        {user?.roles?.toLowerCase() === 'staff' && (
   <button
     type="button"
     onClick={() => navigate('/distribution-program')}

@@ -201,7 +201,7 @@ export default function Programs() {
         <Spinner />
       ) : (
         <Band title="Assistance Programs">
-          <div className="grid md:grid-cols-2 gap-4 overflow-y-auto max-h-[580px]">
+          <div className="grid md:grid-cols-2 gap-4 overflow-y-auto max-h-[580px] scrollbar-hide">
             {programs.map((p) => {
               const approvedCount =
                 Number(

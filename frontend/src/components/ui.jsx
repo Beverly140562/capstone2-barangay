@@ -1,7 +1,7 @@
 // Card with optional dark banded header (design: white page -> maroon band + white title)
 export function Card({ title, band, children, action, className = '' }) {
   return (
-    <div className={`bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden ${className}`}>
+    <div className={`bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden  ${className}`}>
       <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-white">
         <h3 className="font-bold text-gray-900">{title}</h3>
         {action}
@@ -14,7 +14,7 @@ export function Card({ title, band, children, action, className = '' }) {
 // Banded card: maroon header bar with white title (design: "Staff Accounts", "Active Assistance Programs"...)
 export function Band({ title, subtitle, action, children, className = '' }) {
   return (
-    <div className={`bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden ${className}`}>
+    <div className={`bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden scrollbar-hide" ${className}`}>
       <div className="flex items-center justify-between px-5 py-4 bg-[#6E2430]">
         <div>
           <h3 className="font-bold text-white text-2xl">{title}</h3>
@@ -29,7 +29,7 @@ export function Band({ title, subtitle, action, children, className = '' }) {
 
 export function PageHeader({ title, subtitle, children }) {
   return (
-    <div className="flex items-start justify-between mb-5 pt-5">
+    <div className="flex items-start justify-between mb-5 pt-5 ">
       <div>
         <h1 className="text-[32px] font-extrabold text-ink">{title}</h1>
         {subtitle && <p className="mt-1 text-[20px] text-muted">{subtitle}</p>}
@@ -97,7 +97,7 @@ export function Input({ label, ...props }) {
 export function Select({ label, children, ...props }) {
   return (
     <label className="block text-lg p-2">
-      <span className="text-gray-700 font-semibold mb-1 block">{label}</span>
+      <span className="text-gray-700  text-xl font-semibold mb-1 block">{label}</span>
       <select
         {...props}
         className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 text-xl focus:outline-none focus:ring-2 focus:ring-brand"
@@ -128,8 +128,8 @@ export function Button({ children, variant = 'primary', ...props }) {
 
 export function Table({ head, children }) {
   return (
-    <div className="max-h-[500px] rounded-lg">
-      <table className="w-full min-w-[1000px] text-xl text-left text-gray-900 border border-gray-300">
+    <div className="max-h-[500px] rounded-lg scrollbar-hide">
+      <table className="w-full min-w-[900px] text-xl text-left text-gray-900 border border-gray-300 ">
         
         <thead className="sticky top-0 z-20 bg-[#FFD7D7] w-full">
           <tr className="border-b border-gray-400 text-xl uppercase tracking-wide text-brand ">

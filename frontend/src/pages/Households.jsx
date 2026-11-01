@@ -280,6 +280,7 @@ const open = async (id) => {
               : 'Household Records'
           }
         >
+        <div className="max-h-[500px] overflow-auto scrollbar-hide"> 
           <Table
             head={[
               'Household',
@@ -396,6 +397,7 @@ const programNames = programs
               </tr>
             )}
           </Table>
+          </div> 
         </Band>
       )}
 
