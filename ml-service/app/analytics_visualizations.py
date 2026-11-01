@@ -187,7 +187,7 @@ def create_feature_relationship_chart(records):
 
         return numerator / denominator
 
-    cell = min(65, 330 // len(available))
+    cell = min(95, 330 // len(available))
     left = 220
     top = 135
 
