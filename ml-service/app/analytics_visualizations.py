@@ -4,8 +4,8 @@ import math
 from html import escape
 
 
-WIDTH = 800
-HEIGHT = 450
+WIDTH = 1000
+HEIGHT = 650
 
 
 def _number(value):
@@ -187,9 +187,9 @@ def create_feature_relationship_chart(records):
 
         return numerator / denominator
 
-    cell = min(65, 330 // len(available))
-    left = 220
-    top = 80
+    cell = min(85, 430 // len(available))
+    left = 280
+    top = 130
 
     for i, first in enumerate(available):
         y = top + i * cell
