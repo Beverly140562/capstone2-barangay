@@ -5,7 +5,7 @@ from html import escape
 
 
 WIDTH = 800
-HEIGHT = 450
+HEIGHT = 550
 
 
 def _number(value):
@@ -131,6 +131,7 @@ def create_income_chart(records):
     return _image(svg + _svg_end())
 
 
+
 def create_feature_relationship_chart(records):
     features = [
         "monthly_income",
@@ -149,7 +150,7 @@ def create_feature_relationship_chart(records):
     svg = _svg_start("Household Feature Relationships")
 
     if len(available) < 2:
-        svg += '<text x="400" y="420" text-anchor="middle">Insufficient numeric data</text>'
+        svg += '<text x="400" y="220" text-anchor="middle">Insufficient numeric data</text>'
         return _image(svg + _svg_end())
 
     data = {
@@ -187,17 +188,19 @@ def create_feature_relationship_chart(records):
 
         return numerator / denominator
 
-    cell = min(95, 330 // len(available))
+    cell = min(65, 300 // len(available))
     left = 220
-    top = 135
+    top = 85
 
+    # Draw row labels and correlation boxes
     for i, first in enumerate(available):
         y = top + i * cell
 
         svg += f'''
         <text x="{left - 12}" y="{y + cell / 2 + 5}"
-            text-anchor="end" font-family="Arial"
-            font-size="18">{escape(first)}</text>
+            text-anchor="end"
+            font-family="Arial"
+            font-size="16">{escape(first)}</text>
         '''
 
         for j, second in enumerate(available):
@@ -209,28 +212,42 @@ def create_feature_relationship_chart(records):
                 label = "N/A"
             else:
                 intensity = int(255 * (1 - abs(value)))
+
                 if value >= 0:
                     fill = f"rgb(255,{intensity},{intensity})"
                 else:
                     fill = f"rgb({intensity},{intensity},255)"
+
                 label = f"{value:.2f}"
 
             svg += f'''
-            <rect x="{x}" y="{y}" width="{cell - 2}"
-                height="{cell - 2}" fill="{fill}"
+            <rect x="{x}" y="{y}"
+                width="{cell - 2}"
+                height="{cell - 2}"
+                fill="{fill}"
                 stroke="#999999"/>
+
             <text x="{x + (cell - 2) / 2}"
                 y="{y + cell / 2 + 5}"
-                text-anchor="middle" font-family="Arial"
+                text-anchor="middle"
+                font-family="Arial"
                 font-size="18">{label}</text>
             '''
 
+    # Column labels BELOW the correlation boxes, slanted
     for j, feature in enumerate(available):
         x = left + j * cell + cell / 2
+        y = top + len(available) * cell + 15
+
         svg += f'''
-        <text x="{x}" y="{top - 15}"
-            text-anchor="middle" font-family="Arial"
-            font-size="18">{escape(feature)}</text>
+        <text x="{x}" y="{y}"
+            text-anchor="end"
+            transform="rotate(-45 {x} {y})"
+            font-family="Arial"
+            font-size="16">
+            {escape(feature)}
+        </text>
         '''
 
     return _image(svg + _svg_end())
+
