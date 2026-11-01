@@ -189,7 +189,7 @@ def create_feature_relationship_chart(records):
 
     cell = min(65, 330 // len(available))
     left = 220
-    top = 200
+    top = 80
 
     for i, first in enumerate(available):
         y = top + i * cell
