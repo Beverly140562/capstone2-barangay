@@ -62,11 +62,11 @@ def create_vulnerability_chart(records):
 
         svg += f'''
         <text x="190" y="{y + 27}" text-anchor="end"
-            font-family="Arial" font-size="15">{escape(label)}</text>
+            font-family="Arial" font-size="25">{escape(label)}</text>
         <rect x="{chart_left}" y="{y}" width="{bar_width:.2f}"
             height="{bar_height}" fill="#6E2430" rx="5"/>
         <text x="{chart_left + bar_width + 10}" y="{y + 27}"
-            font-family="Arial" font-size="15">{count}</text>
+            font-family="Arial" font-size="25">{count}</text>
         '''
 
     return _image(svg + _svg_end())

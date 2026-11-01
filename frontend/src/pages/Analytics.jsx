@@ -100,7 +100,7 @@ const params = new URLSearchParams({
     return (
       <article
         key={chart.endpoint}
-        className="min-w-0 rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
+        className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
       >
         <h3 className="text-2xl font-bold text-ink">
           {chart.title}
@@ -133,28 +133,6 @@ const params = new URLSearchParams({
   );
 }
 
-
-/* =========================================================
-   HELPERS
-========================================================= */
-
-function normalizeStatus(value) {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase();
-}
-
-function normalizeId(value) {
-  if (
-    value === null ||
-    value === undefined ||
-    value === ''
-  ) {
-    return '';
-  }
-
-  return String(value).trim();
-}
 
 /* =========================================================
    NORMALIZE PUROK DATA
@@ -650,7 +628,9 @@ export default function Analytics() {
       </div>
 
       {/* SEABORN MACHINE LEARNING ANALYTICS */}
-<SeabornCharts />
+      <div className='text-2xl'>
+        <SeabornCharts />
+      </div>
 
 {/* EXISTING ASSISTANCE DISTRIBUTION + PUROK */}
 <div className="grid gap-5 md:grid-cols-2"></div>
@@ -744,7 +724,7 @@ export default function Analytics() {
           </h3>
 
           {byPurok.length > 0 ? (
-            <div className="mt-4 overflow-x-auto">
+            <div className="mt-4 overflow-x-auto scrollbar-hide">
 
               <div
                 style={{
