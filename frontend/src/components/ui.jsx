@@ -136,7 +136,7 @@ export function Table({ head, children }) {
             {head.map((h, i) => (
               <th
                 key={i}
-                className="px-5 py-3 font-bold bg-[#FFD7D7]"
+                className="px-5 py-3 text-xl font-bold bg-[#FFD7D7]"
               >
                 {h}
               </th>
@@ -144,7 +144,7 @@ export function Table({ head, children }) {
           </tr>
         </thead>
 
-        <tbody className="divide-y divide-gray-100 text-muted">
+        <tbody className="divide-y text-xl divide-gray-100 text-muted">
           {children}
         </tbody>
 

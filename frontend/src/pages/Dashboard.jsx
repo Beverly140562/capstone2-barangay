@@ -936,13 +936,13 @@ export default function Dashboard() {
 
         {/* APPROVAL QUEUE */}
 
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm ">
 
           <div className="bg-[#6E2430] px-6 py-4 text-xl font-extrabold text-white">
             ML-Validated Households Awaiting Approval
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scrollbar-hide">
 
             <Table
               head={[
@@ -963,22 +963,22 @@ export default function Dashboard() {
                     )}
                   >
 
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 text-2xl">
                       {h?.household_head_name ||
                         '—'}
                     </td>
 
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 text-2xl">
                       {h?.purok || '—'}
                     </td>
 
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 text-2xl">
                       {programsText(
                         h?.suggested_programs
                       )}
                     </td>
 
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 text-2xl">
                       <Status
                         tone={vulnerabilityTone(
                           h?.vulnerability
@@ -990,7 +990,7 @@ export default function Dashboard() {
                       </Status>
                     </td>
 
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 text-2xl">
                       <Status tone="await">
                         Validated
                       </Status>
@@ -1176,22 +1176,22 @@ export default function Dashboard() {
                     )}
                   >
 
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 text-2xl">
                       {h?.household_head_name ||
                         '—'}
                     </td>
 
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 text-2xl">
                       {h?.purok || '—'}
                     </td>
 
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 text-2xl">
                       {programsText(
                         h?.suggested_programs
                       )}
                     </td>
 
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 text-2xl">
                       {formatDate(
                         h?.visited_date ||
                         h?.created_at
@@ -1421,22 +1421,22 @@ export default function Dashboard() {
                       )}
                     >
 
-                      <td className="px-3 py-2 font-semibold">
+                      <td className="px-3 py-2 font-semibold text-2xl">
                         {h?.household_head_name ||
                           '—'}
                       </td>
 
-                      <td className="px-3 py-2 font-semibold">
+                      <td className="px-3 py-2 font-semibold text-2xl">
                         {h?.purok || '—'}
                       </td>
 
-                      <td className="px-3 py-2 font-semibold">
+                      <td className="px-3 py-2 font-semibold text-2xl">
                         {programsText(
                           h?.suggested_programs
                         )}
                       </td>
 
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2 text-2xl">
                         <Status
                           tone={vulnerabilityTone(
                             h?.vulnerability
@@ -1518,22 +1518,22 @@ export default function Dashboard() {
                         }
                       >
 
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-2 text-2xl">
                           {record?.household_head_name ||
                             '—'}
                         </td>
 
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-2 text-2xl">
                           {record?.purok ||
                             '—'}
                         </td>
 
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-2 text-2xl">
                           {record?.program_name ||
                             '—'}
                         </td>
 
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-2 text-2xl">
                           {formatDate(
                             record?.approved_at ||
                             record?.submitted_at
