@@ -189,7 +189,7 @@ def create_feature_relationship_chart(records):
 
     cell = min(65, 330 // len(available))
     left = 220
-    top = 100
+    top = 200
 
     for i, first in enumerate(available):
         y = top + i * cell
@@ -230,7 +230,7 @@ def create_feature_relationship_chart(records):
         svg += f'''
         <text x="{x}" y="{top - 12}"
             text-anchor="middle" font-family="Arial"
-            font-size="11">{escape(feature)}</text>
+            font-size="18">{escape(feature)}</text>
         '''
 
     return _image(svg + _svg_end())
