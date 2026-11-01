@@ -118,12 +118,12 @@ def create_income_chart(records):
         <text x="{x + bar_width / 2:.2f}"
             y="{chart_y + chart_height + 22}"
             text-anchor="middle" font-family="Arial"
-            font-size="12">{count}</text>
+            font-size="18">{count}</text>
         '''
 
     svg += f'''
     <text x="400" y="405" text-anchor="middle"
-        font-family="Arial" font-size="14">
+        font-family="Arial" font-size="20">
         Monthly income range: {minimum:,.0f} - {maximum:,.0f}
     </text>
     '''
@@ -149,7 +149,7 @@ def create_feature_relationship_chart(records):
     svg = _svg_start("Household Feature Relationships")
 
     if len(available) < 2:
-        svg += '<text x="400" y="220" text-anchor="middle">Insufficient numeric data</text>'
+        svg += '<text x="400" y="420" text-anchor="middle">Insufficient numeric data</text>'
         return _image(svg + _svg_end())
 
     data = {
@@ -197,7 +197,7 @@ def create_feature_relationship_chart(records):
         svg += f'''
         <text x="{left - 12}" y="{y + cell / 2 + 5}"
             text-anchor="end" font-family="Arial"
-            font-size="12">{escape(first)}</text>
+            font-size="18">{escape(first)}</text>
         '''
 
         for j, second in enumerate(available):
@@ -222,7 +222,7 @@ def create_feature_relationship_chart(records):
             <text x="{x + (cell - 2) / 2}"
                 y="{y + cell / 2 + 5}"
                 text-anchor="middle" font-family="Arial"
-                font-size="12">{label}</text>
+                font-size="18">{label}</text>
             '''
 
     for j, feature in enumerate(available):
