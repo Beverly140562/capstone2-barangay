@@ -231,7 +231,7 @@ def create_feature_relationship_chart(records):
                 y="{y + cell / 2 + 5}"
                 text-anchor="middle"
                 font-family="Arial"
-                font-size="18">{label}</text>
+                font-size="20">{label}</text>
             '''
 
     # Column labels BELOW the correlation boxes, slanted
@@ -244,7 +244,7 @@ def create_feature_relationship_chart(records):
             text-anchor="end"
             transform="rotate(-45 {x} {y})"
             font-family="Arial"
-            font-size="16">
+            font-size="20">
             {escape(feature)}
         </text>
         '''

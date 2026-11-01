@@ -106,6 +106,14 @@ const params = new URLSearchParams({
           {chart.title}
         </h3>
 
+        {chart.endpoint === "income" && (
+  <p className="mt-2 text-sm leading-relaxed text-gray-500">
+    Shows how household monthly income is distributed
+    across different income ranges. Taller bars indicate
+    more households within that income range.
+  </p>
+)}
+
         <p className="mt-1 text-4xl text-gray-500">
           {chart.description}
         </p>
