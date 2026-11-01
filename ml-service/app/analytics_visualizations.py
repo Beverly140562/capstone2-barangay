@@ -226,17 +226,11 @@ def create_feature_relationship_chart(records):
             '''
 
     for j, feature in enumerate(available):
-    x = left + j * cell + cell / 2
-    y = top - 15
-
-    svg += f'''
-    <text x="{x}" y="{y}"
-        text-anchor="end"
-        transform="rotate(-35 {x} {y})"
-        font-family="Arial"
-        font-size="16">
-        {escape(feature)}
-    </text>
-    '''
+        x = left + j * cell + cell / 2
+        svg += f'''
+        <text x="{x}" y="{top - 15}"
+            text-anchor="middle" font-family="Arial"
+            font-size="18">{escape(feature)}</text>
+        '''
 
     return _image(svg + _svg_end())
