@@ -14,6 +14,7 @@ const { auth } = require('../middleware/auth');
 // --------------------------------------------------
 // LOGIN
 // --------------------------------------------------
+
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body || {};
@@ -43,11 +44,18 @@ router.post('/login', async (req, res) => {
       });
     }
 
+    // Update the last successful login date.
+    await query(
+      `UPDATE users
+       SET visited_date = NOW()
+       WHERE user_id = $1`,
+      [user.user_id]
+    );
+
     const token = signToken(user);
 
     res.json({
       token,
-
       user: {
         user_id: user.user_id,
         username: user.username,
@@ -64,6 +72,7 @@ router.post('/login', async (req, res) => {
     });
   }
 });
+
 
 // --------------------------------------------------
 // CURRENT LOGGED-IN USER

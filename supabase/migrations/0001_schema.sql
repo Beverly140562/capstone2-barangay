@@ -13,7 +13,8 @@ create table if not exists users (
   roles          varchar(20)  not null check (roles in ('admin','captain','staff')),
   username       varchar(150) not null unique,
   account_status boolean      not null default true,
-  date_created   timestamptz  not null default now()
+  date_created   timestamptz  not null default now(),
+  visited_date   timestamptz
 );
 
 -- Table 3: households

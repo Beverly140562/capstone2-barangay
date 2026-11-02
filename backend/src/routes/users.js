@@ -9,7 +9,7 @@ router.use(auth, requireRole('admin'));
 router.get('/', async (req, res) => {
   try {
     const rows = await query(
-      `select user_id, username, full_name, email, roles, account_status, date_created
+      `select user_id, username, full_name, email, roles, account_status, date_created, visited_date
          from users order by date_created desc`
     );
     res.json({ users: rows });
@@ -29,7 +29,7 @@ router.post('/', async (req, res) => {
     }
     const rows = await query(
       `insert into users (email, full_name, password, roles, username)
-       values ($1, $2, $3, $4, $5) returning user_id, username, full_name, email, roles, account_status`,
+       values ($1, $2, $3, $4, $5) returning user_id, username, full_name, email, roles, account_status, visited_date`,
       [email || null, full_name, hashPassword(password), roles, username]
     );
     await logActivity(req, 'CREATE_USER', `Created ${roles} account "${username}".`);
@@ -68,7 +68,7 @@ router.put('/:id', async (req, res) => {
     params.push(id);
     const rows = await query(
       `update users set ${fields.join(', ')} where user_id = $${params.length}
-       returning user_id, username, full_name, email, roles, account_status`,
+       returning user_id, username, full_name, email, roles, account_status, visited_date`,
       params
     );
     if (!rows[0]) return res.status(404).json({ error: 'User not found.' });
@@ -88,7 +88,7 @@ router.patch('/:id/status', async (req, res) => {
     }
     const rows = await query(
       `update users set account_status = $1 where user_id = $2
-       returning user_id, username, full_name, email, roles, account_status`,
+       returning user_id, username, full_name, email, roles, account_status, visited_date`,
       [account_status, id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'User not found.' });
@@ -102,7 +102,7 @@ router.patch('/:id/status', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    const rows = await query('delete from users where user_id = $1 returning username', [req.params.id]);
+    const rows = await query('delete from users where user_id = $1 returning username, visited_date', [req.params.id]);
     if (!rows[0]) return res.status(404).json({ error: 'User not found.' });
     await logActivity(req, 'DELETE_USER', `Deleted account "${rows[0].username}".`);
     res.json({ success: true });
