@@ -1072,7 +1072,7 @@ export default function Dashboard() {
             value={
               validatedHouseholds.length
             }
-            note="Ready for Captain"
+            note="Ready for Review"
           />
 
           <Stat

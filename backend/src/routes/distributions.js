@@ -118,6 +118,22 @@ async function programExists(programId) {
   return getRows(result).length > 0;
 }
 
+function getManilaToday() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value])
+  );
+
+  return `${values.year}-${values.month}-${values.day}`;
+} 
+
+
 /* ======================================================
    GET /distributions/approved?program_id=...
 
@@ -799,16 +815,18 @@ router.post('/release', requireRole('staff'), async (req, res) => {
     }
 
     if (!isValidDateOnly(release_date)) {
-      return res.status(400).json({
-        error: 'Invalid receipt date. Use YYYY-MM-DD.',
-      });
-    }
+  return res.status(400).json({
+    error: 'Invalid receipt date. Use YYYY-MM-DD.',
+  });
+}
 
-    if (release_date > todayISO()) {
-      return res.status(400).json({
-        error: 'Receipt date cannot be in the future.',
-      });
-    }
+const todayInManila = getManilaToday();
+
+if (release_date > todayInManila) {
+  return res.status(400).json({
+    error: `Receipt date cannot be in the future. Today's date in the Philippines is ${todayInManila}.`,
+  });
+}
 
     const result = await query(
       `
