@@ -1175,6 +1175,13 @@ export default function Reports() {
   const isAnalytics =
     type === 'analytics';
 
+  const [releaseStatus, setReleaseStatus] = useState('All');
+const [distributionPeriodType, setDistributionPeriodType] =
+  useState('Monthly Distribution');
+const [distributionMonth, setDistributionMonth] = useState('');
+const [distributionStartDate, setDistributionStartDate] = useState('');
+const [distributionEndDate, setDistributionEndDate] = useState('');
+
   /* ======================================================
      RESET
      ====================================================== */
@@ -1312,7 +1319,31 @@ const loadRecords = async () => {
       );
 
       let result = response;
+if (type === 'distribution') {
+  if (
+    distributionPeriodType === 'Monthly Distribution' &&
+    !distributionMonth
+  ) {
+    toast.error('Please select a distribution month.');
+    return;
+  }
 
+  if (
+    distributionPeriodType === 'Custom Date Range' &&
+    (!distributionStartDate || !distributionEndDate)
+  ) {
+    toast.error('Please select the distribution start and end dates.');
+    return;
+  }
+
+  if (
+    distributionPeriodType === 'Custom Date Range' &&
+    distributionEndDate < distributionStartDate
+  ) {
+    toast.error('The distribution end date cannot be before the start date.');
+    return;
+  }
+}
       // Support Axios responses and wrapped API responses.
       for (let i = 0; i < 3; i++) {
         if (
@@ -2968,6 +2999,78 @@ try {
       );
     })}
   </Select>
+)}
+
+
+{type === 'distribution' && (
+  <>
+    <Select
+      label="RELEASE STATUS"
+      value={releaseStatus}
+      onChange={(event) => {
+        setReleaseStatus(event.target.value);
+        resetLoaded();
+      }}
+    >
+      <option value="All">All</option>
+      <option value="Released">Released</option>
+      <option value="Not Released">Not Released</option>
+    </Select>
+
+    <Select
+      label="DISTRIBUTION PERIOD TYPE"
+      value={distributionPeriodType}
+      onChange={(event) => {
+        setDistributionPeriodType(event.target.value);
+        setDistributionMonth('');
+        setDistributionStartDate('');
+        setDistributionEndDate('');
+        resetLoaded();
+      }}
+    >
+      <option value="Monthly Distribution">
+        Monthly Distribution
+      </option>
+      <option value="Custom Date Range">
+        Custom Date Range
+      </option>
+    </Select>
+
+    {distributionPeriodType === 'Monthly Distribution' ? (
+      <Input
+        label="DISTRIBUTION MONTH"
+        type="month"
+        value={distributionMonth}
+        onChange={(event) => {
+          setDistributionMonth(event.target.value);
+          resetLoaded();
+        }}
+      />
+    ) : (
+      <>
+        <Input
+          label="DISTRIBUTION START DATE"
+          type="date"
+          value={distributionStartDate}
+          onChange={(event) => {
+            setDistributionStartDate(event.target.value);
+            resetLoaded();
+          }}
+        />
+
+        <Input
+          label="DISTRIBUTION END DATE"
+          type="date"
+          value={distributionEndDate}
+          min={distributionStartDate || undefined}
+          onChange={(event) => {
+            setDistributionEndDate(event.target.value);
+            resetLoaded();
+          }}
+        />
+      </>
+    )}
+  </>
 )}
 
           <div className="flex justify-start">

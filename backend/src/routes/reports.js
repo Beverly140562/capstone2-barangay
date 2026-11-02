@@ -390,33 +390,34 @@ const QUERIES = {
     ) = 'approved'
   `,
 
-  distribution: `
-    SELECT
-      d.distribution_id,
-      d.household_id,
-      d.program_id,
-      d.created_at,
-      d.release_status,
-      d.release_date,
-      d.amount_released,
+  ddistribution: `
+  SELECT
+    d.distribution_id,
+    d.household_id,
+    d.program_id,
+    d.created_at,
+    d.amount_released,
+    d.status,
+    d.release_status,
+    d.release_date,
+    d.period_start,
+    d.period_end,
 
-      h.household_head_name,
-      h.purok,
-      h.address,
-      h.vulnerability,
+    h.household_head_name,
+    h.purok,
+    h.address,
+    h.vulnerability,
 
-      p.program_name
+    p.program_name
 
-    FROM ml_assistance_distribution d
+  FROM ml_assistance_distribution d
 
-    INNER JOIN households h
-      ON h.household_id =
-         d.household_id
+  INNER JOIN households h
+    ON h.household_id = d.household_id
 
-    LEFT JOIN assistance_programs p
-      ON p.program_id =
-         d.program_id
-  `,
+  LEFT JOIN assistance_programs p
+    ON p.program_id = d.program_id
+`,
 
   analytics: `
     SELECT
@@ -590,6 +591,7 @@ if (normalizedType === 'households') {
   // ASSISTANCE DISTRIBUTION
   
   // ASSISTANCE DISTRIBUTION
+    // ASSISTANCE DISTRIBUTION
   if (normalizedType === 'distribution') {
     addPurokCondition(
       conditions,
@@ -597,6 +599,7 @@ if (normalizedType === 'households') {
       purok
     );
 
+    // Filter by record creation date (existing report date filter).
     addDateCondition(
       conditions,
       params,
@@ -604,17 +607,85 @@ if (normalizedType === 'households') {
       dateFilter
     );
 
-    // Filter by the selected assistance program.
+    // Filter by assistance program.
     const programId = String(
       req.query.programId || ''
     ).trim();
 
     if (programId && programId !== 'All') {
       params.push(programId);
-      const programParam = params.length;
 
       conditions.push(
-        `d.program_id = $${programParam}`
+        `d.program_id = $${params.length}::uuid`
+      );
+    }
+
+    // Filter by release status.
+    const releaseStatus = String(
+      req.query.releaseStatus ||
+      req.query.release_status ||
+      'All'
+    ).trim();
+
+    if (releaseStatus.toLowerCase() !== 'all') {
+      const normalizedStatus = releaseStatus.toLowerCase();
+
+      if (!['released', 'not released'].includes(normalizedStatus)) {
+        throw new Error('Invalid release status filter.');
+      }
+
+      params.push(normalizedStatus);
+
+      conditions.push(
+        `LOWER(TRIM(COALESCE(d.release_status, ''))) = $${params.length}`
+      );
+    }
+
+    // Filter by distribution period.
+    const periodStart = String(
+      req.query.periodStart ||
+      req.query.period_start ||
+      ''
+    ).trim();
+
+    const periodEnd = String(
+      req.query.periodEnd ||
+      req.query.period_end ||
+      ''
+    ).trim();
+
+    if (Boolean(periodStart) !== Boolean(periodEnd)) {
+      throw new Error(
+        'Both distribution period start and end dates are required.'
+      );
+    }
+
+    if (periodStart && periodEnd) {
+      const validStart = /^\d{4}-\d{2}-\d{2}$/.test(periodStart);
+      const validEnd = /^\d{4}-\d{2}-\d{2}$/.test(periodEnd);
+
+      if (!validStart || !validEnd) {
+        throw new Error(
+          'Invalid distribution period. Use YYYY-MM-DD.'
+        );
+      }
+
+      if (periodEnd < periodStart) {
+        throw new Error(
+          'Distribution period end cannot be before start.'
+        );
+      }
+
+      params.push(periodStart);
+
+      conditions.push(
+        `d.period_start = $${params.length}::date`
+      );
+
+      params.push(periodEnd);
+
+      conditions.push(
+        `d.period_end = $${params.length}::date`
       );
     }
 
@@ -625,7 +696,10 @@ if (normalizedType === 'households') {
     }
 
     sql += `
-      ORDER BY d.created_at DESC NULLS LAST
+      ORDER BY
+        d.period_start DESC NULLS LAST,
+        d.created_at DESC NULLS LAST,
+        h.household_head_name ASC
     `;
 
     return { sql, params };
