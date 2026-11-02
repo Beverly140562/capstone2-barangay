@@ -185,6 +185,11 @@ async function predictHousehold(household) {
 
     // No confirmed illness data source is available yet.
     illness_indicator: null,
+
+    senior_citizen_present:
+  household.age != null
+    ? Number(household.age) >= 60
+    : null,
   };
 
   // 4. Validate required features.

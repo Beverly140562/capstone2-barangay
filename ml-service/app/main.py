@@ -5,7 +5,7 @@ import os
 # Pandas, Matplotlib, or scikit-learn.
 
 
-
+import json
 import sys
 import io
 from pathlib import Path
@@ -195,6 +195,7 @@ class Household(BaseModel):
     all_members_explicitly_unemployed: bool | None = None
     provisional_disability_indicator: bool | None = None
     illness_indicator: bool | None = None
+    senior_citizen_present: bool | None = None
 
 
 class Program(BaseModel):
@@ -620,17 +621,12 @@ def normalize_rule(value: str | None) -> str:
     return " ".join(str(value).strip().lower().split())
 
 
+
 def match_programs(
     household: Household,
     vulnerability: str,
     programs: list[Program],
 ) -> list[dict]:
-    """
-    Match programs using the eligibility rules saved
-    in assistance_programs.
-
-    Returns program dictionaries consistently.
-    """
 
     matched_programs = []
 
@@ -643,48 +639,153 @@ def match_programs(
     )
 
     disability = household.provisional_disability_indicator
+    senior = household.senior_citizen_present
+
+    normalized_vulnerability = normalize_rule(vulnerability)
 
     for program in programs:
 
-        name = normalize_rule(program.program_name)
-        rules = normalize_rule(program.eligibility_rules)
+        raw_rules = program.eligibility_rules
 
-        if not rules:
+        if not raw_rules:
             continue
 
-        eligible = False
+        # Read structured JSON rules.
+        try:
+            rules = json.loads(raw_rules)
 
-        # 4Ps: Highly Vulnerable AND family size >= 5
-        if (
-            name == "4ps - pantawid pamilya"
-            and "highly vulnerable" in rules
-            and "family size >= 5" in rules
-        ):
-            eligible = (
-                vulnerability == "Highly Vulnerable"
-                and family_size is not None
-                and family_size >= 5
+            if not isinstance(rules, dict):
+                continue
+
+        except (json.JSONDecodeError, TypeError):
+            # Backward compatibility for old comma-separated rules.
+            legacy = [
+                normalize_rule(item)
+                for item in str(raw_rules).split(',')
+                if item.strip()
+            ]
+
+            rules = {
+                "vulnerability_levels": [
+                    item.title() for item in legacy
+                    if item in [
+                        "highly vulnerable",
+                        "moderately vulnerable",
+                        "low vulnerable",
+                    ]
+                ],
+                "household_conditions": [],
+                "monthly_income_max": None,
+            }
+
+            if "senior citizen" in legacy:
+                rules["household_conditions"].append(
+                    "senior_citizen"
+                )
+
+            if "person with disability" in legacy:
+                rules["household_conditions"].append(
+                    "person_with_disability"
+                )
+
+            if "family size >= 6" in legacy:
+                rules["household_conditions"].append(
+                    "family_size_gte_6"
+                )
+
+            if "family size >= 5" in legacy:
+                rules["household_conditions"].append(
+                    "family_size_gte_5"
+                )
+
+            for item in legacy:
+                if item.startswith("monthly income <="):
+                    try:
+                        rules["monthly_income_max"] = float(
+                            item.split("<=", 1)[1].strip()
+                        )
+                    except ValueError:
+                        pass
+
+        # ------------------------------------------------
+        # VULNERABILITY GROUP
+        # OR within the group
+        # ------------------------------------------------
+
+        vulnerability_levels = rules.get(
+            "vulnerability_levels", []
+        )
+
+        vulnerability_match = (
+            not vulnerability_levels
+            or normalized_vulnerability in [
+                normalize_rule(level)
+                for level in vulnerability_levels
+            ]
+        )
+
+        # ------------------------------------------------
+        # HOUSEHOLD CONDITIONS GROUP
+        # OR within the group
+        # ------------------------------------------------
+
+        conditions = rules.get(
+            "household_conditions", []
+        )
+
+        condition_results = []
+
+        for condition in conditions:
+
+            if condition == "senior_citizen":
+                condition_results.append(senior is True)
+
+            elif condition == "person_with_disability":
+                condition_results.append(disability is True)
+
+            elif condition == "family_size_gte_6":
+                condition_results.append(
+                    family_size is not None
+                    and family_size >= 6
+                )
+
+            elif condition == "family_size_gte_5":
+                condition_results.append(
+                    family_size is not None
+                    and family_size >= 5
+                )
+
+            else:
+                # Unknown condition must not qualify a household.
+                condition_results.append(False)
+
+        household_match = (
+            not conditions or any(condition_results)
+        )
+
+        # ------------------------------------------------
+        # MONTHLY INCOME GROUP
+        # ------------------------------------------------
+
+        income_limit = rules.get("monthly_income_max")
+
+        income_match = (
+            income_limit is None
+            or (
+                income is not None
+                and income <= float(income_limit)
             )
+        )
 
-        # AICS: numeric low-income cutoff is not defined.
-        elif name == "aics - cash assistance":
-            eligible = False
+        # ------------------------------------------------
+        # ALL SELECTED GROUPS MUST MATCH
+        # ------------------------------------------------
 
-        # Medical Assistance: confirmed disabled member.
-        elif name == "medical assistance program":
-            eligible = (
-                "disabled member" in rules
-                and "senior citizen" in rules
-                and disability is True
-            )
-
-        # Rice Subsidy: monthly income below ₱8,000.
-        elif name == "rice subsidy program":
-            eligible = (
-                "monthly income below 8,000 php" in rules
-                and income is not None
-                and income < 8000
-            )
+        eligible = (
+            vulnerability_match
+            and household_match
+            and income_match
+        )
 
         if eligible:
             matched_programs.append({
@@ -695,6 +796,7 @@ def match_programs(
             })
 
     return matched_programs
+
 
 
 # ============================================================
@@ -780,60 +882,41 @@ def predict_one(
     # INCOME-BASED CLASSIFICATION
     # --------------------------------------------------------
 
+    # --------------------------------------------------------
+    # INCOME-BASED CLASSIFICATION
+    # --------------------------------------------------------
+
     income = row.monthly_income
 
     if income is not None:
 
         # Below ₱10,000 = Highly Vulnerable
         if income < 10000:
-
             vulnerability = "Highly Vulnerable"
             classification_source = "Income-based rule"
 
-            suggested_programs = match_programs(
-                row,
-                vulnerability,
-                programs,
-            )
-
         # ₱10,000 through ₱24,000 = Moderately Vulnerable
         elif 10000 <= income <= 24000:
-
             vulnerability = "Moderately Vulnerable"
             classification_source = "Income-based rule"
 
-            suggested_programs = match_programs(
-                row,
-                vulnerability,
-                programs,
-            )
-
         # ₱25,000 and above = Low Vulnerable
         elif income >= 25000:
-
             vulnerability = "Low Vulnerable"
             classification_source = "Income-based rule"
 
-            suggested_programs = []
+        # ₱24,000.01 to below ₱25,000:
+        # Retain the Random Forest classification.
 
-            # Special 4Ps exception:
-            # Income >= ₱25,000 AND household has more than 5 members.
-            if family_size is not None and family_size > 5:
+    # --------------------------------------------------------
+    # DYNAMIC ASSISTANCE PROGRAM MATCHING
+    # --------------------------------------------------------
 
-                for program in programs:
-
-                    name = normalize_rule(program.program_name)
-
-                    if (
-                        "4ps" in name
-                        or "pantawid pamilya" in name
-                    ):
-                        suggested_programs.append({
-                            "program_id": program.program_id,
-                            "program_name": program.program_name,
-                            "description": program.description,
-                            "eligibility_rules": program.eligibility_rules,
-                        })
+    suggested_programs = match_programs(
+        row,
+        vulnerability,
+        programs,
+    )
 
     # Income from ₱24,000.01 to below ₱25,000
     # has no defined income bracket yet.

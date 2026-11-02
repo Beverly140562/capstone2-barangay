@@ -96,7 +96,7 @@ export function Input({ label, ...props }) {
 
 export function Select({ label, children, ...props }) {
   return (
-    <label className="block text-lg p-2">
+    <label className="block text-lg">
       <span className="text-gray-700  text-xl font-semibold mb-1 block">{label}</span>
       <select
         {...props}

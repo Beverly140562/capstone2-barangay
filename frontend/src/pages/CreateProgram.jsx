@@ -44,22 +44,56 @@ const ELIGIBILITY_OPTIONS = [
   },
 ];
 
+
 const RULE_MAP = {
-  'Highly Vulnerable': 'Highly Vulnerable',
-  'Moderately Vulnerable': 'Moderately Vulnerable',
-  'Low Vulnerable': 'Low Vulnerable',
+  'Highly Vulnerable': {
+    group: 'vulnerability',
+    value: 'Highly Vulnerable',
+  },
+  'Moderately Vulnerable': {
+    group: 'vulnerability',
+    value: 'Moderately Vulnerable',
+  },
+  'Low Vulnerable': {
+    group: 'vulnerability',
+    value: 'Low Vulnerable',
+  },
 
-  'Senior Citizen': 'Senior Citizen',
-  'Person with Disability': 'Person with Disability',
+  'Senior Citizen': {
+    group: 'household',
+    value: 'senior_citizen',
+  },
+  'Person with Disability': {
+    group: 'household',
+    value: 'person_with_disability',
+  },
+  'Family Size ≥ 6': {
+    group: 'household',
+    value: 'family_size_gte_6',
+  },
+  'Family Size ≥ 5': {
+    group: 'household',
+    value: 'family_size_gte_5',
+  },
 
-  'Family Size ≥ 6': 'Family Size >= 6',
-  'Family Size ≥ 5': 'Family Size >= 5',
-
-  'Monthly Income ≤ ₱5,000': 'Monthly Income <= 5000',
-  'Monthly Income ≤ ₱8,000': 'Monthly Income <= 8000',
-  'Monthly Income ≤ ₱10,000': 'Monthly Income <= 10000',
-  'Monthly Income ≤ ₱12,000': 'Monthly Income <= 12000',
+  'Monthly Income ≤ ₱5,000': {
+    group: 'income',
+    value: 5000,
+  },
+  'Monthly Income ≤ ₱8,000': {
+    group: 'income',
+    value: 8000,
+  },
+  'Monthly Income ≤ ₱10,000': {
+    group: 'income',
+    value: 10000,
+  },
+  'Monthly Income ≤ ₱12,000': {
+    group: 'income',
+    value: 12000,
+  },
 };
+
 
 export default function CreateProgram() {
   const navigate = useNavigate();
@@ -93,31 +127,59 @@ export default function CreateProgram() {
         editingProgram.description || '',
     });
 
-    const existingRules = String(
-      editingProgram.eligibility_rules || ''
-    )
-      .split(',')
-      .map((rule) => rule.trim())
-      .filter(Boolean);
+    
+let selected = [];
 
-    const selected = existingRules
-      .map((savedRule) => {
-        const found = Object.entries(
-          RULE_MAP
-        ).find(([label, mapped]) => {
-          return (
-            savedRule.toLowerCase() ===
-              label.toLowerCase() ||
-            savedRule.toLowerCase() ===
-              mapped.toLowerCase()
-          );
-        });
+try {
+  const saved = JSON.parse(
+    editingProgram.eligibility_rules || '{}'
+  );
 
-        return found ? found[0] : null;
-      })
-      .filter(Boolean);
+  if (saved && typeof saved === 'object') {
+    selected = [
+      ...(saved.vulnerability_levels || []),
+      ...(saved.household_conditions || []),
+    ];
 
-    setSelectedRules(selected);
+    if (saved.monthly_income_max != null) {
+      selected.push(
+        `Monthly Income ≤ ₱${Number(
+          saved.monthly_income_max
+        ).toLocaleString('en-PH')}`
+      );
+    }
+
+    // Convert saved values back to checkbox labels.
+    selected = selected.map((value) => {
+      const found = Object.entries(RULE_MAP).find(
+        ([label, rule]) => rule.value === value
+      );
+
+      return found ? found[0] : null;
+    }).filter(Boolean);
+  }
+} catch {
+  // Backward compatibility with older comma-separated rules.
+  const existingRules = String(
+    editingProgram.eligibility_rules || ''
+  )
+    .split(',')
+    .map((rule) => rule.trim());
+
+  selected = existingRules
+    .map((savedRule) => {
+      const found = Object.entries(RULE_MAP).find(
+        ([label]) =>
+          label.toLowerCase() === savedRule.toLowerCase()
+      );
+
+      return found ? found[0] : null;
+    })
+    .filter(Boolean);
+}
+
+setSelectedRules(selected);
+
   }, [isEditing, editingProgram]);
 
   // ============================================================
@@ -140,14 +202,41 @@ export default function CreateProgram() {
   // BUILD ELIGIBILITY RULES
   // ============================================================
 
-  const buildEligibilityRules = () => {
-    return selectedRules
-      .map(
-        (rule) =>
-          RULE_MAP[rule] || rule
-      )
-      .join(', ');
+  
+const buildEligibilityRules = () => {
+  const rules = {
+    vulnerability_levels: [],
+    household_conditions: [],
+    monthly_income_max: null,
   };
+
+  selectedRules.forEach((selected) => {
+    const rule = RULE_MAP[selected];
+
+    if (!rule) return;
+
+    if (rule.group === 'vulnerability') {
+      rules.vulnerability_levels.push(rule.value);
+    }
+
+    if (rule.group === 'household') {
+      rules.household_conditions.push(rule.value);
+    }
+
+    if (rule.group === 'income') {
+      rules.monthly_income_max =
+        rules.monthly_income_max === null
+          ? rule.value
+          : Math.max(
+              rules.monthly_income_max,
+              rule.value
+            );
+    }
+  });
+
+  return JSON.stringify(rules);
+};
+
 
   // ============================================================
   // CREATE / UPDATE

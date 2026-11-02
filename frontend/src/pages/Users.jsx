@@ -355,9 +355,9 @@ export default function Users() {
                     type="button"
                     onClick={resetForm}
                     title="Cancel editing"
-                    className="flex h-10 items-center justify-center rounded-lg border border-gray-300 px-3 text-gray-600 hover:bg-gray-100"
+                    className="flex h-10 items-center justify-center rounded-lg border border-gray-700 px-3 text-gray-900 hover:bg-gray-200"
                   >
-                    <X size={18} />
+                    <X size={20} />
                   </button>
                 )}
               </div>
@@ -381,19 +381,19 @@ export default function Users() {
                 {users.map((u) => (
                   <tr key={u.user_id}>
 
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 text-gray-800">
                       {u.full_name}
                     </td>
 
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 text-gray-800">
                       {u.username}
                     </td>
 
-                    <td className="px-3 py-2 capitalize">
+                    <td className="px-3 py-2 text-gray-800 capitalize">
                       {u.roles}
                     </td>
 
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 text-gray-800">
                       All Puroks
                     </td>
 
@@ -407,7 +407,7 @@ export default function Users() {
                       </Status>
                     </td>
 
-                    <td className="whitespace-nowrap px-3 py-2">
+                    <td className="whitespace-nowrap px-3 py-2 text-gray-800">
                       {u.visited_date ? formatDate(u.visited_date) : 'Never logged in'}
                     </td>
 
@@ -465,22 +465,19 @@ export default function Users() {
 
               <div>
                 <p className="text-lg font-semibold text-gray-800">
-                  System User Activities
-                </p>
-
-                <p className="text-sm text-gray-500">
                   Monitor account activities and recorded actions.
                 </p>
+
               </div>
 
               <button
                 type="button"
                 onClick={loadActivityLogs}
                 disabled={activityLoading}
-                className="rounded-lg bg-[#6E2430] px-4 py-2 text-white transition hover:bg-[#581c26] disabled:opacity-50"
+                className="rounded-lg bg-[#6E2430] px-5 py-2 text-white transition hover:bg-[#581c26] disabled:opacity-50"
               >
                 <RefreshCw
-                  size={20}
+                  size={25}
                   className={`mr-2 inline ${
                     activityLoading ? 'animate-spin' : ''
                   }`}
@@ -510,7 +507,7 @@ export default function Users() {
                 <table className="w-full text-left">
 
                   <thead className="sticky top-0 z-10 bg-gray-100">
-                    <tr className="text-lg text-gray-600">
+                    <tr className="text-2xl text-gray-600">
                       <th className="px-4 py-3">Name</th>
                       <th className="px-4 py-3">Role</th>
                       <th className="px-4 py-3">Action</th>
@@ -526,25 +523,25 @@ export default function Users() {
                         className="border-b border-gray-100 hover:bg-gray-50"
                       >
 
-                        <td className="whitespace-nowrap px-4 py-3 text-lg font-medium text-gray-800">
+                        <td className="whitespace-nowrap px-4 py-3 text-2xl font-medium text-gray-800">
                           {log.user_name || 'Unknown User'}
                         </td>
 
                         <td className="px-4 py-3">
-                          <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold capitalize text-blue-700">
+                          <span className="rounded-full bg-blue-100 px-3 py-1 text-xl font-semibold capitalize text-blue-700">
                             {log.user_role || 'Unknown'}
                           </span>
                         </td>
 
-                        <td className="px-4 py-3 text-lg font-semibold text-[#6E2430]">
+                        <td className="px-4 py-3 text-xl font-semibold text-[#6E2430]">
                           {log.action || '—'}
                         </td>
 
-                        <td className="max-w-sm px-4 py-3 text-base text-gray-600">
+                        <td className="max-w-sm px-4 py-3 text-xl text-gray-600">
                           {log.activity_description || 'No description'}
                         </td>
 
-                        <td className="whitespace-nowrap px-4 py-3 text-base text-gray-600">
+                        <td className="whitespace-nowrap px-4 py-3 text-xl text-gray-600">
                           {formatDate(log.timestamp)}
                         </td>
 
