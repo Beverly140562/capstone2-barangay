@@ -303,6 +303,73 @@ async function refreshHouseholdPrediction(householdId) {
 router.use(auth);
 
 
+
+/*
+|--------------------------------------------------------------------------
+| REFRESH HOUSEHOLD ML PREDICTION
+|--------------------------------------------------------------------------
+| Generates and saves a new vulnerability prediction and
+| dynamically matched assistance programs.
+|--------------------------------------------------------------------------
+*/
+router.post(
+  '/:id/predict',
+  requireRole('admin', 'captain', 'staff'),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const prediction = await refreshHouseholdPrediction(id);
+
+      await logActivity(
+        req,
+        'REFRESH_HOUSEHOLD_PREDICTION',
+        `Refreshed ML prediction for household ${id}.`
+      );
+
+      // Return the saved household values.
+      const rows = await query(
+        `
+          SELECT
+            household_id,
+            vulnerability,
+            vulnerability_prob,
+            suggested_programs
+          FROM households
+          WHERE household_id = $1
+          LIMIT 1
+        `,
+        [id]
+      );
+
+      if (!rows.length) {
+        return res.status(404).json({
+          error: 'Household not found after prediction.'
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: 'Household prediction refreshed successfully.',
+        household: rows[0],
+        prediction
+      });
+
+    } catch (error) {
+      console.error(
+        'POST /households/:id/predict error:',
+        error
+      );
+
+      return res.status(500).json({
+        error: 'Failed to refresh household prediction.',
+        details: error.message
+      });
+    }
+  }
+);
+
+
 /*
 |--------------------------------------------------------------------------
 | GET HOUSEHOLD MEMBERS

@@ -195,7 +195,6 @@ class Household(BaseModel):
     all_members_explicitly_unemployed: bool | None = None
     provisional_disability_indicator: bool | None = None
     illness_indicator: bool | None = None
-    senior_citizen_present: bool | None = None
 
 
 class Program(BaseModel):
