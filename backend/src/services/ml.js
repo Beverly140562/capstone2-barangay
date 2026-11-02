@@ -197,6 +197,7 @@ async function predictHousehold(household) {
     'head_education',
     'monthly_income',
     'family_size',
+    'senior_citizen_present',
   ];
 
   const missingFields = requiredFields.filter((field) => {
