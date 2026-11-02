@@ -175,6 +175,69 @@ export default function Programs() {
     });
   };
 
+  const formatEligibilityRules = (rules) => {
+  if (!rules) return 'No eligibility rules specified.';
+
+  let parsed = rules;
+
+  // Convert JSON string into an object if necessary.
+  if (typeof rules === 'string') {
+    try {
+      parsed = JSON.parse(rules);
+    } catch {
+      return rules;
+    }
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    return String(parsed);
+  }
+
+  const parts = [];
+
+  // Vulnerability levels
+  if (parsed.vulnerability_levels?.length > 0) {
+    parts.push(
+      `Vulnerability Level: ${parsed.vulnerability_levels.join(' or ')}`
+    );
+  }
+
+  // Household conditions
+  if (parsed.household_conditions?.length > 0) {
+    const conditions = parsed.household_conditions.map((condition) => {
+      const labels = {
+        person_with_disability: 'Person with Disability',
+        senior_citizen: 'Senior Citizen',
+        family_size_gte_5: 'Family Size of 5 or More',
+        family_size_gte_6: 'Family Size of 6 or More',
+      };
+
+      return labels[condition] || condition.replaceAll('_', ' ');
+    });
+
+    parts.push(
+      `Household Condition: ${conditions.join(' or ')}`
+    );
+  }
+
+  // Monthly income limit
+  if (
+    parsed.monthly_income_max !== null &&
+    parsed.monthly_income_max !== undefined
+  ) {
+    parts.push(
+      `Maximum Monthly Income: ₱${Number(
+        parsed.monthly_income_max
+      ).toLocaleString('en-PH')}`
+    );
+  }
+
+  return parts.length
+    ? parts.join(' | ')
+    : 'No eligibility rules specified.';
+};
+
+
   return (
     <div className="space-y-6">
       <div className="mt-5" />
@@ -276,13 +339,12 @@ export default function Programs() {
                       'No description provided.'}
                   </p>
 
-                  <p className="text-xl text-muted mt-2">
-                    <span className="font-semibold">
-                      Eligibility:
-                    </span>{' '}
-                    {p.eligibility_rules ||
-                      'No eligibility rules specified.'}
-                  </p>
+                  <p className="text-base text-muted mt-2 leading-relaxed">
+  <span className="font-semibold">
+    Eligibility:
+  </span>{' '}
+  {formatEligibilityRules(p.eligibility_rules)}
+</p>
 
                   <div className="mt-4 flex items-center justify-between gap-3">
                     <span className="text-xl text-muted-light">
