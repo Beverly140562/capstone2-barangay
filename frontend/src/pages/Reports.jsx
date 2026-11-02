@@ -209,6 +209,31 @@ function reportCell(value) {
   return String(value);
 }
 
+function getDistributionStatus(row) {
+  const status = String(row?.release_status || '')
+    .trim()
+    .toLowerCase();
+
+  return status === 'released'
+    ? 'Released'
+    : 'Not Released';
+}
+
+function getDistributionPeriod(row) {
+  const start = row?.period_start;
+  const end = row?.period_end;
+
+  if (!start || !end) {
+    return '—';
+  }
+
+  // Preserve the exact YYYY-MM-DD values from the database.
+  const startDate = String(start).slice(0, 10);
+  const endDate = String(end).slice(0, 10);
+
+  return `${startDate} to ${endDate}`;
+}
+
 function getReportColumns(reportType) {
   const column = (header, keys, formatter = reportCell) => ({
     header,
@@ -286,15 +311,42 @@ if (reportType === 'households') {
   }
 
   if (reportType === 'distribution') {
-    return [
-      column('Household', ['household_head_name', 'household_name', 'head_name', 'name']),
-      column('Purok', ['purok', 'purok_number', 'purok_name']),
-      column('Assistance Program', ['program_name', 'assistance_program', 'program', 'program_title']),
-      column('Amount / Quantity', ['amount_released']),
-      column('Distribution Status', ['distribution_status', 'release_status',]),
-      column('Release Date', ['release_date', 'released_at', 'distributed_at', 'distribution_date', 'created_at'], formatDate),
-    ];
-  }
+  return [
+    column('Household', [
+      'household_head_name',
+      'household_name',
+      'head_name',
+      'name',
+    ]),
+
+    column('Purok', [
+      'purok',
+      'purok_number',
+      'purok_name',
+    ]),
+
+    column('Assistance Program', [
+      'program_name',
+      'assistance_program',
+      'program',
+      'program_title',
+    ]),
+
+    column('Amount / Quantity', [
+      'amount_released',
+    ]),
+
+    {
+      header: 'Release Status',
+      value: (row) => getDistributionStatus(row),
+    },
+
+    {
+      header: 'Distribution Period',
+      value: (row) => getDistributionPeriod(row),
+    },
+  ];
+}
 
   return [
     column('Household', ['household_head_name', 'household_name', 'head_name', 'name']),
@@ -3069,13 +3121,22 @@ try {
                 <thead className="sticky top-0 z-20 bg-[#FFD7D7]">
                   <tr className="border-b text-2xl font-semibold text-[#6E2430]">
                     {[
-                      'Select',
-                      'Household',
-                      'Purok',
-                      'Classification',
-                      'Status',
-                      'Date',
-                    ].map(
+  'Select',
+  'Household',
+  'Purok',
+  ...(type === 'distribution'
+    ? [
+        'Assistance Program',
+        'Amount / Quantity',
+        'Release Status',
+        'Distribution Period',
+      ]
+    : [
+        'Classification',
+        'Status',
+        'Date',
+      ]),
+].map(
                       (
                         heading
                       ) => (
@@ -3148,25 +3209,44 @@ try {
                             )}
                           </td>
 
-                          <td className="px-4 py-3 text-xl font-semibold">
-                            {getClassification(
-                              row
-                            ) || '—'}
-                          </td>
+                          {type === 'distribution' ? (
+  <>
+    <td className="px-4 py-3 text-xl font-semibold">
+      {row.program_name || '—'}
+    </td>
 
-                          <td className="px-4 py-3 text-xl font-semibold">
-                            {getStatus(
-                              row
-                            ) || '—'}
-                          </td>
+    <td className="px-4 py-3 text-xl font-semibold">
+      {row.amount_released != null
+        ? `₱ ${Number(row.amount_released).toLocaleString('en-PH', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}`
+        : '—'}
+    </td>
 
-                          <td className="px-4 py-3 text-xl font-semibold">
-                            {formatDate(
-                              getRecordDate(
-                                row
-                              )
-                            )}
-                          </td>
+    <td className="px-4 py-3 text-xl font-semibold">
+      {getDistributionStatus(row)}
+    </td>
+
+    <td className="px-4 py-3 text-xl font-semibold">
+      {getDistributionPeriod(row)}
+    </td>
+  </>
+) : (
+  <>
+    <td className="px-4 py-3 text-xl font-semibold">
+      {getClassification(row) || '—'}
+    </td>
+
+    <td className="px-4 py-3 text-xl font-semibold">
+      {getStatus(row) || '—'}
+    </td>
+
+    <td className="px-4 py-3 text-xl font-semibold">
+      {formatDate(getRecordDate(row))}
+    </td>
+  </>
+)}
                         </tr>
                       );
                     }

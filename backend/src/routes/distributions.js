@@ -668,7 +668,61 @@ RETURNING *
               item.household.household_head_name || item.householdId
             } in this period. Refresh and try again.`,
           saved,
-        });
+        });const insertResult = await query(
+  `
+  INSERT INTO ml_assistance_distribution (
+    household_id,
+    program_id,
+    amount_released,
+    status,
+    release_status,
+    release_date,
+    period_start,
+    period_end
+  )
+  VALUES (
+    $1,
+    $2,
+    $3::numeric,
+    'Approved',
+    'Not Released',
+    NULL,
+    $4::date,
+    $5::date
+  )
+  ON CONFLICT (
+    household_id,
+    program_id,
+    period_start,
+    period_end
+  )
+  WHERE period_start IS NOT NULL
+    AND period_end IS NOT NULL
+  DO NOTHING
+  RETURNING *
+  `,
+  [
+    item.householdId,
+    program_id,
+    item.amount,
+    period_start,
+    period_end,
+  ]
+);
+
+const insertedRows = getRows(insertResult);
+
+if (insertedRows.length === 0) {
+  return res.status(409).json({
+    error:
+      `A distribution already exists for ${
+        item.household.household_head_name || item.householdId
+      } in this period. Refresh and try again.`,
+    saved,
+  });
+}
+
+saved.push(...insertedRows);
       }
 
       // Add returned rows once only.
@@ -970,45 +1024,46 @@ router.post('/', requireRole('staff'), async (req, res) => {
     }
 
     const result = await query(
-      `
-      INSERT INTO ml_assistance_distribution (
-        household_id,
-        program_id,
-        amount_released,
-        status,
-        release_status,
-        release_date,
-        period_start,
-        period_end
-      )
-      VALUES (
-  $1,
-  $2,
-  $3::numeric,
-  'Approved',
-  'Not Released',
-  NULL
-)
-RETURNING *
-      ON CONFLICT (
-        household_id,
-        program_id,
-        period_start,
-        period_end
-      )
-      WHERE period_start IS NOT NULL
-        AND period_end IS NOT NULL
-      DO NOTHING
-      RETURNING *
-      `,
-      [
-        household_id,
-        program_id,
-        Number(amount),
-        period_start,
-        period_end,
-      ]
-    );
+  `
+  INSERT INTO ml_assistance_distribution (
+    household_id,
+    program_id,
+    amount_released,
+    status,
+    release_status,
+    release_date,
+    period_start,
+    period_end
+  )
+  VALUES (
+    $1,
+    $2,
+    $3::numeric,
+    'Approved',
+    'Not Released',
+    NULL,
+    $4::date,
+    $5::date
+  )
+  ON CONFLICT (
+    household_id,
+    program_id,
+    period_start,
+    period_end
+  )
+  WHERE period_start IS NOT NULL
+    AND period_end IS NOT NULL
+  DO NOTHING
+  RETURNING *
+  `,
+  [
+    household_id,
+    program_id,
+    Number(amount),
+    period_start,
+    period_end,
+  ]
+);
 
     const rows = getRows(result);
 
