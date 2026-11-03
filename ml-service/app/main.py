@@ -800,6 +800,8 @@ def relationships_chart(
     endDate: str | None = Query(None),
 ):
     try:
+        print("[RELATIONSHIPS] Request received")
+
         records = get_filtered_chart_records(
             dateRange,
             purok,
@@ -807,20 +809,27 @@ def relationships_chart(
             endDate,
         )
 
-        return generate_chart_response(
+        print("[RELATIONSHIPS] Records:", len(records))
+
+        response = generate_chart_response(
             create_feature_relationship_chart,
             records,
         )
 
+        print("[RELATIONSHIPS] Chart generated successfully")
+
+        return response
+
     except Exception as exc:
         import traceback
+
+        print("[RELATIONSHIPS] ERROR:")
         traceback.print_exc()
 
         raise HTTPException(
             status_code=500,
             detail=f"Relationships chart failed: {type(exc).__name__}: {exc}",
         ) from exc
-
 
 # ============================================================
 # PROGRAM MATCHING

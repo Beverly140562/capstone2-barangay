@@ -177,7 +177,12 @@ def create_income_chart(records):
 
 def create_feature_relationship_chart(records):
     """
-    Correlation heatmap using actual numeric household data.
+    Pearson correlation heatmap using actual household data.
+
+    Features:
+    - member_count
+    - household_monthly_income
+
     Does not invent scoring columns, weights, or values.
     """
 
@@ -197,50 +202,67 @@ def create_feature_relationship_chart(records):
         '''
         return _image(svg + _svg_end())
 
-    df = pd.DataFrame(records)
+    # Extract actual numeric values.
+    pairs = []
 
-    available = [
-        column for column in numeric_columns
-        if column in df.columns
-    ]
+    for row in records:
+        member_count = _number(row.get("member_count"))
+        income = _number(row.get("household_monthly_income"))
 
-    if len(available) < 2:
+        if member_count is None or income is None:
+            continue
+
+        pairs.append((member_count, income))
+
+    if len(pairs) < 2:
         svg += '''
         <text x="400" y="250" text-anchor="middle"
               font-family="Arial" font-size="17">
-            Not enough numeric household features.
+            Not enough numeric household records.
         </text>
         '''
         return _image(svg + _svg_end())
 
-    data = df[available].apply(
-        pd.to_numeric,
-        errors="coerce"
+    x_values = [pair[0] for pair in pairs]
+    y_values = [pair[1] for pair in pairs]
+
+    x_mean = sum(x_values) / len(x_values)
+    y_mean = sum(y_values) / len(y_values)
+
+    x_diff = [value - x_mean for value in x_values]
+    y_diff = [value - y_mean for value in y_values]
+
+    numerator = sum(
+        x * y for x, y in zip(x_diff, y_diff)
     )
 
-    usable = [
-        column for column in available
-        if data[column].notna().sum() >= 2
-        and data[column].nunique() > 1
+    x_variance = sum(x * x for x in x_diff)
+    y_variance = sum(y * y for y in y_diff)
+
+    denominator = math.sqrt(
+        x_variance * y_variance
+    )
+
+    correlation_value = (
+        numerator / denominator
+        if denominator > 0
+        else None
+    )
+
+    # Build the correlation matrix.
+    correlation = [
+        [1.0, correlation_value],
+        [correlation_value, 1.0],
     ]
 
-    if len(usable) < 2:
-        svg += '''
-        <text x="400" y="250" text-anchor="middle"
-              font-family="Arial" font-size="17">
-            Not enough varied data for correlation.
-        </text>
-        '''
-        return _image(svg + _svg_end())
-
-    correlation = data[usable].corr()
-    columns = list(correlation.columns)
+    columns = numeric_columns
 
     cell = 130
     left = 250
     top = 180
 
     for row_index, row_name in enumerate(columns):
+
         y = top + row_index * cell
 
         svg += f'''
@@ -252,12 +274,15 @@ def create_feature_relationship_chart(records):
         '''
 
         for col_index, col_name in enumerate(columns):
-            value = correlation.loc[row_name, col_name]
 
-            if pd.isna(value):
+            value = correlation[row_index][col_index]
+
+            if value is None:
                 color = "rgb(230,230,230)"
                 label = "N/A"
+
             else:
+                value = max(-1.0, min(1.0, value))
                 intensity = int(abs(value) * 255)
 
                 if value < 0:
@@ -280,6 +305,7 @@ def create_feature_relationship_chart(records):
                   width="{cell}" height="{cell}"
                   fill="{color}"
                   stroke="white" stroke-width="2"/>
+
             <text x="{x + cell / 2}"
                   y="{y + cell / 2 + 5}"
                   text-anchor="middle"
@@ -291,7 +317,7 @@ def create_feature_relationship_chart(records):
     svg += f'''
     <text x="400" y="570" text-anchor="middle"
           font-family="Arial" font-size="13">
-        Pearson correlation | {len(data)} household records
+        Pearson correlation | {len(pairs)} household records
     </text>
     '''
 
