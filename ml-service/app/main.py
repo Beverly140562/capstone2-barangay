@@ -238,7 +238,18 @@ def has_illness(value) -> bool:
         "null",
         "not specified",
     }
+def has_disability(value) -> bool:
+    if isinstance(value, bool):
+        return value
 
+    normalized = normalize_rule(value)
+
+    return normalized in {
+        "yes",
+        "true",
+        "1",
+        "present",
+    }
 
 # ============================================================
 # ANALYTICS FILTER HELPERS
@@ -813,6 +824,7 @@ def normalize_rule(value: str | None) -> str:
 
 
 
+
 def match_programs(
     household: Household,
     vulnerability: str,
@@ -841,32 +853,40 @@ def match_programs(
         if not raw_rules:
             continue
 
-        # Read structured JSON rules.
-        # Read structured JSON rules.
-try:
-    if isinstance(raw_rules, dict):
-        rules = raw_rules
+        # ------------------------------------------------
+        # READ STRUCTURED JSON RULES
+        # Supports both dictionaries and JSON strings.
+        # ------------------------------------------------
 
-    elif isinstance(raw_rules, str):
-        rules = json.loads(raw_rules)
+        try:
+            if isinstance(raw_rules, dict):
+                rules = raw_rules
 
-    else:
-        continue
+            elif isinstance(raw_rules, str):
+                rules = json.loads(raw_rules)
 
-    if not isinstance(rules, dict):
-        continue
+            else:
+                rules = None
 
-except (json.JSONDecodeError, TypeError, ValueError):
-            # Backward compatibility for old comma-separated rules.
+            if not isinstance(rules, dict):
+                continue
+
+        except (json.JSONDecodeError, TypeError, ValueError):
+
+            # ------------------------------------------------
+            # BACKWARD COMPATIBILITY: LEGACY COMMA-SEPARATED RULES
+            # ------------------------------------------------
+
             legacy = [
                 normalize_rule(item)
-                for item in str(raw_rules).split(',')
+                for item in str(raw_rules).split(",")
                 if item.strip()
             ]
 
             rules = {
                 "vulnerability_levels": [
-                    item.title() for item in legacy
+                    item.title()
+                    for item in legacy
                     if item in [
                         "highly vulnerable",
                         "moderately vulnerable",
@@ -936,6 +956,8 @@ except (json.JSONDecodeError, TypeError, ValueError):
 
         for condition in conditions:
 
+            condition = normalize_rule(condition)
+
             if condition == "senior_citizen":
                 condition_results.append(senior is True)
 
@@ -955,7 +977,7 @@ except (json.JSONDecodeError, TypeError, ValueError):
                 )
 
             else:
-                # Unknown condition must not qualify a household.
+                # Unknown conditions must not qualify.
                 condition_results.append(False)
 
         household_match = (
@@ -968,13 +990,16 @@ except (json.JSONDecodeError, TypeError, ValueError):
 
         income_limit = rules.get("monthly_income_max")
 
-        income_match = (
-            income_limit is None
-            or (
-                income is not None
-                and income <= float(income_limit)
+        try:
+            income_match = (
+                income_limit is None
+                or (
+                    income is not None
+                    and income <= float(income_limit)
+                )
             )
-        )
+        except (TypeError, ValueError):
+            income_match = False
 
         # ------------------------------------------------
         # ALL SELECTED GROUPS MUST MATCH
