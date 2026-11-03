@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
-import { mlApi } from '../lib/mlApi';
 import { useAuth } from '../context/AuthContext';
 import {
   PageHeader,
@@ -415,10 +414,6 @@ const programNames = programs
 }
 
 function HouseholdDrawer({ data, onClose, reload }) {
-
-  const [prediction, setPrediction] = useState(null);
-const [predictionLoading, setPredictionLoading] = useState(false);
-const [predictionError, setPredictionError] = useState('');
   const { user } = useAuth();
 
   const household =
@@ -484,13 +479,9 @@ const members = Array.isArray(data?.members)
         : '—',
     ],
     [
-  'Disability',
-  household.disability_present === true
-    ? 'Yes'
-    : household.disability_present === false
-      ? 'No'
-      : 'Not specified',
-],
+      'Disability',
+      household.disability_present || 'Not specified',
+    ],
     ['Residence', household.residence],
     [
       'Household Status',
@@ -505,60 +496,6 @@ const members = Array.isArray(data?.members)
     ['Contact', household.contact_number],
     ['Religion', household.religion],
   ];
-
-  useEffect(() => {
-  let cancelled = false;
-
-  async function runPrediction() {
-    if (!household?.household_id) return;
-
-    setPrediction(null);
-    setPredictionError('');
-    setPredictionLoading(true);
-
-    try {
-      // 1. Load assistance programs from Express
-      const programResponse = await api.get('/programs');
-
-const allPrograms = Array.isArray(programResponse?.programs)
-  ? programResponse.programs
-  : [];
-
-const activePrograms = allPrograms.filter(
-  (program) => program.is_active === true
-);
-
-const result = await mlApi.predict({
-  household,
-  members: Array.isArray(members) ? members : [],
-  programs: activePrograms,
-});
-
-      if (!cancelled) {
-        console.log('HOUSEHOLD ML PREDICTION:', result);
-        setPrediction(result);
-      }
-    } catch (error) {
-      console.error('Household prediction failed:', error);
-
-      if (!cancelled) {
-        setPredictionError(
-          error?.message || 'Failed to classify household.'
-        );
-      }
-    } finally {
-      if (!cancelled) {
-        setPredictionLoading(false);
-      }
-    }
-  }
-
-  runPrediction();
-
-  return () => {
-    cancelled = true;
-  };
-}, [household?.household_id]);
 
 
   return (
@@ -618,84 +555,54 @@ const result = await mlApi.predict({
 
         {/* ML Classification */}
         <section className="mt-5 rounded-lg bg-maroon p-4 text-white">
-  <div className="flex items-center justify-between gap-3">
-    <span className="text-lg font-semibold">
-      ML Classification
-    </span>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-lg font-semibold">
+              ML Classification
+            </span>
 
-    <Badge
-      tone={statusTone(
-        prediction?.vulnerability || household.vulnerability
-      )}
-    >
-      {predictionLoading
-        ? 'Classifying...'
-        : prediction?.vulnerability ||
-          household.vulnerability ||
-          'Unclassified'}
-    </Badge>
-  </div>
-
-  <div className="mt-2 text-lg text-red-200">
-    Probability:{' '}
-    {prediction?.vulnerability_prob != null
-      ? `${(
-          Number(prediction.vulnerability_prob) * 100
-        ).toFixed(1)}%`
-      : household.vulnerability_prob != null
-        ? `${(
-            Number(household.vulnerability_prob) * 100
-          ).toFixed(1)}%`
-        : '—'}
-  </div>
-
-  {prediction?.classification_source && (
-    <p className="mt-1 text-sm text-red-100">
-      Classification source: {prediction.classification_source}
-    </p>
-  )}
-
-  {predictionError && (
-    <p className="mt-2 text-sm text-yellow-200">
-      {predictionError}
-    </p>
-  )}
-
-  <div className="mt-4 text-xl font-semibold">
-    Suggested Programs
-  </div>
-
-  <div className="mt-2 space-y-3">
-    {predictionLoading ? (
-      <p className="text-red-200">
-        Checking household eligibility...
-      </p>
-    ) : (prediction?.suggested_programs || []).length > 0 ? (
-      prediction.suggested_programs.map((program, index) => (
-        <div
-          key={`${program.program_id || program.program_name}-${index}`}
-          className="rounded-lg border border-white/20 bg-white/10 p-3"
-        >
-          <div className="font-semibold text-white">
-            {program.program_name}
+            <Badge tone={statusTone(household.vulnerability)}>
+              {household.vulnerability || 'Unclassified'}
+            </Badge>
           </div>
 
-          {program.description && (
-            <p className="mt-1 text-sm text-red-100">
-              {program.description}
-            </p>
-          )}
+          <div className="text-lg text-red-200 mt-2">
+            Probability:{' '}
+            {household.vulnerability_prob != null
+              ? `${(
+                  Number(household.vulnerability_prob) * 100
+                ).toFixed(1)}%`
+              : '—'}
+          </div>
+
+          <div className="text-xl mt-3 font-semibold">
+            Suggested Programs
+          </div>
+
+          <div className="mt-2 space-y-3">
+  {programs.length > 0 ? (
+    programs.map((program, index) => (
+      <div
+        key={`${program.program_name}-${index}`}
+        className="rounded-lg bg-white/10 border border-white/20 p-3"
+      >
+        <div className="font-semibold text-white">
+          {program.program_name}
         </div>
-      ))
-    ) : (
-      <p className="text-red-200">
-        {prediction
-          ? 'No eligible programs matched.'
-          : 'No prediction available.'}
-      </p>
-    )}
-  </div>
-</section>
+
+        {program.description && (
+          <p className="text-sm text-red-100 mt-1">
+            {program.description}
+          </p>
+        )}
+      </div>
+    ))
+  ) : (
+    <p className="text-red-200">
+      No suggested programs.
+    </p>
+  )}
+</div>
+        </section>
 
         {/* Household Members */}
         <section className="mt-6">
