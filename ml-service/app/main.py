@@ -1,13 +1,14 @@
+
 import os
 
-# Limit native numerical-library thread usage.
-# These must be configured before importing NumPy,
-# Pandas, Matplotlib, or scikit-learn.
-
+# Set these before importing Pandas, NumPy, or scikit-learn.
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
 
 import json
 import sys
-import io
 from pathlib import Path
 from datetime import date, datetime, timedelta
 
@@ -19,16 +20,13 @@ from fastapi.responses import StreamingResponse
 from joblib import load
 from pydantic import BaseModel, Field
 
-
 load_dotenv()
 
 APP_DIR = Path(__file__).resolve().parent
 BASE = APP_DIR.parent
 
-# Make modules inside the app directory importable.
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
-
 
 from database import fetch_all
 from analytics import calculate_analytics
@@ -982,6 +980,7 @@ def health():
         "model_file_exists": MODEL_PATH.is_file(),
     }
 
+
 def get_chart_households(
     dateRange="All Time",
     purok="All Puroks",
@@ -994,25 +993,19 @@ def get_chart_households(
             h.purok,
             h.vulnerability,
             h.created_at,
-
             COUNT(hm.household_id) AS member_count,
-
             COALESCE(
                 SUM(COALESCE(hm.monthly_income, 0)),
                 0
             ) AS household_monthly_income
-
         FROM households h
-
         LEFT JOIN household_members hm
             ON hm.household_id = h.household_id
-
         GROUP BY
             h.household_id,
             h.purok,
             h.vulnerability,
             h.created_at
-
         ORDER BY h.created_at DESC
     """)
 
@@ -1023,6 +1016,104 @@ def get_chart_households(
         start_date=startDate,
         end_date=endDate,
         date_field="created_at",
+    )
+
+
+def generate_chart_response(chart_name, chart_function, **filters):
+    try:
+        records = get_chart_households(**filters)
+
+        print(
+            f"[CHART] {chart_name}: "
+            f"{len(records)} household records"
+        )
+
+        if records:
+            print(
+                f"[CHART] {chart_name} columns: "
+                f"{list(records[0].keys())}"
+            )
+
+        image = chart_function(records)
+
+        if not hasattr(image, "read"):
+            raise TypeError(
+                f"{chart_name} chart must return a BytesIO image."
+            )
+
+        image.seek(0)
+
+        return StreamingResponse(
+            image,
+            media_type="image/svg+xml",
+            headers={
+                "Cache-Control": "no-store",
+            },
+        )
+
+    except Exception as exc:
+        import traceback
+
+        print(f"[CHART ERROR] {chart_name}")
+        traceback.print_exc()
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"{chart_name} chart failed: "
+                f"{type(exc).__name__}: {exc}"
+            ),
+        ) from exc
+
+
+@app.get("/analytics/charts/vulnerability")
+def get_vulnerability_chart(
+    dateRange: str = Query("All Time"),
+    purok: str = Query("All Puroks"),
+    startDate: str | None = Query(None),
+    endDate: str | None = Query(None),
+):
+    return generate_chart_response(
+        "Vulnerability",
+        create_vulnerability_chart,
+        dateRange=dateRange,
+        purok=purok,
+        startDate=startDate,
+        endDate=endDate,
+    )
+
+
+@app.get("/analytics/charts/income")
+def get_income_chart(
+    dateRange: str = Query("All Time"),
+    purok: str = Query("All Puroks"),
+    startDate: str | None = Query(None),
+    endDate: str | None = Query(None),
+):
+    return generate_chart_response(
+        "Income",
+        create_income_chart,
+        dateRange=dateRange,
+        purok=purok,
+        startDate=startDate,
+        endDate=endDate,
+    )
+
+
+@app.get("/analytics/charts/relationships")
+def get_relationship_chart(
+    dateRange: str = Query("All Time"),
+    purok: str = Query("All Puroks"),
+    startDate: str | None = Query(None),
+    endDate: str | None = Query(None),
+):
+    return generate_chart_response(
+        "Relationships",
+        create_feature_relationship_chart,
+        dateRange=dateRange,
+        purok=purok,
+        startDate=startDate,
+        endDate=endDate,
     )
 
 
@@ -1063,6 +1154,8 @@ def get_vulnerability_chart(
 def get_income_chart(
     dateRange: str = Query("All Time"),
     purok: str = Query("All Puroks"),
+    startDate: str | None = Query(None),
+    endDate: str | None = Query(None),
 ):
     try:
         print("========== INCOME CHART REQUEST ==========")
