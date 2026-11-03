@@ -206,7 +206,7 @@ class Program(BaseModel):
     program_id: str
     program_name: str
     description: str | None = None
-    eligibility_rules: str | None = None
+    eligibility_rules: dict | str | None = None
 
 
 class PredictionRequest(BaseModel):
@@ -226,23 +226,17 @@ class BatchPredictionRequest(BaseModel):
 # ============================================================
 
 
-def has_disability(value) -> bool:
-    if isinstance(value, bool):
-        return value
+def has_illness(value) -> bool:
+    normalized = normalize_rule(value)
 
-    if value is None:
-        return False
-
-    if isinstance(value, (int, float)):
-        return value != 0
-
-    normalized = str(value).strip().lower()
-
-    return normalized in {
-        "yes",
-        "true",
-        "1",
-        "y",
+    return normalized not in {
+        "",
+        "none",
+        "no",
+        "n/a",
+        "na",
+        "null",
+        "not specified",
     }
 
 
@@ -848,13 +842,21 @@ def match_programs(
             continue
 
         # Read structured JSON rules.
-        try:
-            rules = json.loads(raw_rules)
+        # Read structured JSON rules.
+try:
+    if isinstance(raw_rules, dict):
+        rules = raw_rules
 
-            if not isinstance(rules, dict):
-                continue
+    elif isinstance(raw_rules, str):
+        rules = json.loads(raw_rules)
 
-        except (json.JSONDecodeError, TypeError):
+    else:
+        continue
+
+    if not isinstance(rules, dict):
+        continue
+
+except (json.JSONDecodeError, TypeError, ValueError):
             # Backward compatibility for old comma-separated rules.
             legacy = [
                 normalize_rule(item)
@@ -1086,12 +1088,12 @@ def predict_one(
         )
 
         illness = (
-            bool(normalize_rule(row.leading_illnesses))
-            or any(
-                bool(normalize_rule(member.get("leading_illnesses")))
-                for member in members
-            )
-        )
+    has_illness(row.leading_illnesses)
+    or any(
+        has_illness(member.get("leading_illnesses"))
+        for member in members
+    )
+)
 
         composition = "Household with member records"
 
