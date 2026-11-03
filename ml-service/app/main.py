@@ -12,8 +12,6 @@ from pathlib import Path
 from datetime import date, datetime, timedelta
 
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -995,15 +993,12 @@ def get_chart_households(
             h.household_id,
             h.purok,
             h.vulnerability,
-            h.family_number,
-            h.age,
-            h.length_residency,
             h.created_at,
 
+            COUNT(hm.household_id) AS member_count,
+
             COALESCE(
-                SUM(
-                    COALESCE(hm.monthly_income, 0)
-                ),
+                SUM(COALESCE(hm.monthly_income, 0)),
                 0
             ) AS household_monthly_income
 
@@ -1016,10 +1011,9 @@ def get_chart_households(
             h.household_id,
             h.purok,
             h.vulnerability,
-            h.family_number,
-            h.age,
-            h.length_residency,
             h.created_at
+
+        ORDER BY h.created_at DESC
     """)
 
     return filter_records(
@@ -1030,8 +1024,6 @@ def get_chart_households(
         end_date=endDate,
         date_field="created_at",
     )
-
-
 
 
 @app.get("/analytics/charts/vulnerability")
@@ -1114,6 +1106,8 @@ def get_relationship_chart(
     endDate: str | None = Query(None),
 ):
     try:
+        print("========== RELATIONSHIPS CHART REQUEST ==========")
+
         records = get_chart_households(
             dateRange=dateRange,
             purok=purok,
@@ -1123,7 +1117,12 @@ def get_relationship_chart(
 
         print("Relationships chart records:", len(records))
 
+        if records:
+            print("Available columns:", list(records[0].keys()))
+
         image = create_feature_relationship_chart(records)
+
+        print("Relationships chart generated successfully.")
 
         return StreamingResponse(
             image,
@@ -1132,13 +1131,17 @@ def get_relationship_chart(
 
     except Exception as exc:
         import traceback
+
+        print("========== RELATIONSHIPS CHART ERROR ==========")
         traceback.print_exc()
 
         raise HTTPException(
             status_code=500,
-            detail=f"Relationship chart failed: {type(exc).__name__}: {exc}",
+            detail=(
+                f"Relationship chart failed: "
+                f"{type(exc).__name__}: {exc}"
+            ),
         ) from exc
-
 
 # ============================================================
 # SINGLE PREDICTION
