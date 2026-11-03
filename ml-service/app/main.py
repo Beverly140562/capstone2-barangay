@@ -1006,6 +1006,28 @@ def match_programs(
 # COLAB RANDOM FOREST PREDICTION
 # ============================================================
 
+def display_vulnerability(label: str) -> str:
+    """
+    Convert the Random Forest model class into
+    the application's displayed vulnerability label.
+    """
+
+    mapping = {
+        "High": "Highly Vulnerable",
+        "Medium": "Moderately Vulnerable",
+        "Low": "Low Vulnerable",
+    }
+
+    normalized_label = str(label).strip()
+
+    if normalized_label not in mapping:
+        raise ValueError(
+            f"Unknown Random Forest vulnerability class: {normalized_label}"
+        )
+
+    return mapping[normalized_label]
+ 
+
 
 def predict_one(
     row: Household,
@@ -1201,15 +1223,21 @@ def predict_one(
             vulnerability = "Low Vulnerable"
             classification_source = "Income-based rule"
 
-    # PREPARE HOUSEHOLD DATA FOR PROGRAM MATCHING
-    matching_household = row.model_copy(update={
+       # PREPARE HOUSEHOLD DATA FOR PROGRAM MATCHING
+
+    updates = {
         "monthly_income": household_income,
         "family_size": family_size,
         "member_count": member_count,
         "provisional_disability_indicator": disability,
         "illness_indicator": illness,
         "senior_citizen_present": senior_citizen,
-    })
+    }
+
+    if hasattr(row, "model_copy"):
+        matching_household = row.model_copy(update=updates)
+    else:
+        matching_household = row.copy(update=updates)
 
     suggested_programs = match_programs(
         matching_household,

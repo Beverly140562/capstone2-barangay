@@ -1,3 +1,4 @@
+
 const { query } = require('../db');
 
 const ML_SERVICE_URL = (
@@ -42,7 +43,10 @@ async function predictHousehold(household) {
     );
   }
 
-  // Fetch all additional members, including their individual incomes.
+  console.log('[ML] Starting prediction:', household.household_id);
+  console.log('[ML] Service URL:', ML_SERVICE_URL);
+
+  // Fetch additional household members.
   const memberRows = await query(
     `
       SELECT *
@@ -54,11 +58,9 @@ async function predictHousehold(household) {
   );
 
   const members = Array.isArray(memberRows) ? memberRows : [];
-
-  // The household row represents the household head.
   const totalFamilySize = members.length + 1;
 
-  // Fetch active assistance programs for the rule matcher.
+  // Fetch active assistance programs.
   const programs = await query(
     `
       SELECT
@@ -73,7 +75,7 @@ async function predictHousehold(household) {
   );
 
   const modelHousehold = {
-    // Head's individual income. FastAPI should add member incomes.
+    // This is the head's individual income, not total household income.
     monthly_income: toNumberOrNull(household.monthly_income),
 
     family_number: toNumberOrNull(household.family_number),
@@ -92,22 +94,35 @@ async function predictHousehold(household) {
     four_ps_member: household.four_ps_member ?? null,
     leading_illnesses: household.leading_illnesses ?? null,
 
-    // Includes the household head.
     member_count: totalFamilySize,
     family_size: totalFamilySize,
   };
 
-  const response = await fetch(`${ML_SERVICE_URL}/predict`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      household: modelHousehold,
-      members,
-      programs: Array.isArray(programs) ? programs : [],
-    }),
-  });
+  console.log('[ML] Household members:', members.length);
+  console.log('[ML] Total family size:', totalFamilySize);
+  console.log('[ML] Active programs:', Array.isArray(programs) ? programs.length : 0);
+
+  let response;
+
+  try {
+    response = await fetch(`${ML_SERVICE_URL}/predict`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        household: modelHousehold,
+        members,
+        programs: Array.isArray(programs) ? programs : [],
+      }),
+    });
+  } catch (error) {
+    console.error('[ML] Could not connect to ML service:', error);
+
+    throw new Error(
+      `Could not connect to ML service at ${ML_SERVICE_URL}: ${error.message}`
+    );
+  }
 
   const responseText = await response.text();
 
@@ -116,12 +131,19 @@ async function predictHousehold(household) {
   try {
     result = responseText ? JSON.parse(responseText) : {};
   } catch {
+    console.error('[ML] Invalid response:', responseText);
+
     throw new Error(
       `ML service returned an invalid response: ${responseText}`
     );
   }
 
   if (!response.ok) {
+    console.error('[ML] Service returned an error:', {
+      status: response.status,
+      result,
+    });
+
     throw new Error(
       result.detail ||
       result.error ||
@@ -130,10 +152,14 @@ async function predictHousehold(household) {
   }
 
   if (!result.vulnerability) {
+    console.error('[ML] Missing vulnerability in response:', result);
+
     throw new Error(
       'ML service response does not contain a vulnerability prediction.'
     );
   }
+
+  console.log('[ML] Prediction successful:', result.vulnerability);
 
   return {
     ...result,

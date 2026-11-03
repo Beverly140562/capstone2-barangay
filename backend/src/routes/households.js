@@ -254,48 +254,85 @@ async function updateById(
 }
 
 
+
 async function refreshHouseholdPrediction(householdId) {
-  const rows = await query(
-    `
-      SELECT *
-      FROM households
-      WHERE household_id = $1
-      LIMIT 1
-    `,
-    [householdId]
-  );
+  console.log('[PREDICT] Step 1: Fetching household:', householdId);
 
-  if (!rows.length) {
-    throw new Error('Household not found.');
-  }
+  try {
+    const rows = await query(
+      `
+        SELECT *
+        FROM households
+        WHERE household_id = $1
+        LIMIT 1
+      `,
+      [householdId]
+    );
 
-  const prediction = await predictHousehold(rows[0]);
+    if (!rows.length) {
+      throw new Error('Household not found.');
+    }
 
-  const suggestedPrograms = Array.isArray(
-    prediction.suggested_programs
-  )
-    ? prediction.suggested_programs
-    : [];
+    console.log('[PREDICT] Step 2: Household fetched successfully.');
 
-  await query(
-    `
-      UPDATE households
-      SET
-        vulnerability = $1,
-        vulnerability_prob = $2,
-        suggested_programs = $3
-      WHERE household_id = $4
-    `,
-    [
-      prediction.vulnerability ?? null,
-      prediction.vulnerability_prob ?? null,
-      suggestedPrograms,
+    console.log('[PREDICT] Step 3: Calling ML service.');
+
+    const prediction = await predictHousehold(rows[0]);
+
+    console.log('[PREDICT] Step 4: ML prediction received:', {
+      vulnerability: prediction.vulnerability,
+      vulnerability_prob: prediction.vulnerability_prob,
+      suggested_programs: prediction.suggested_programs,
+    });
+
+    const suggestedPrograms = Array.isArray(
+      prediction.suggested_programs
+    )
+      ? prediction.suggested_programs
+      : [];
+
+    console.log('[PREDICT] Step 5: Saving prediction to database.');
+
+    const updatedRows = await query(
+      `
+        UPDATE households
+        SET
+          vulnerability = $1,
+          vulnerability_prob = $2,
+          suggested_programs = $3
+        WHERE household_id = $4
+        RETURNING *
+      `,
+      [
+        prediction.vulnerability ?? null,
+        prediction.vulnerability_prob ?? null,
+        suggestedPrograms,
+        householdId,
+      ]
+    );
+
+    if (!updatedRows.length) {
+      throw new Error('Prediction was generated but household update returned no rows.');
+    }
+
+    console.log('[PREDICT] Step 6: Prediction saved successfully.');
+
+    return prediction;
+
+  } catch (error) {
+    console.error('[PREDICT] REFRESH FAILED:', {
       householdId,
-    ]
-  );
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      hint: error.hint,
+      stack: error.stack,
+    });
 
-  return prediction;
+    throw error;
+  }
 }
+
 /*
 |--------------------------------------------------------------------------
 | Authentication
@@ -313,22 +350,38 @@ router.use(auth);
 | dynamically matched assistance programs.
 |--------------------------------------------------------------------------
 */
+
 router.post(
   '/:id/predict',
   requireRole('admin', 'captain', 'staff'),
   async (req, res) => {
+    const { id } = req.params;
+
     try {
-      const { id } = req.params;
+      console.log('[PREDICT ROUTE] Request received:', id);
 
       const prediction = await refreshHouseholdPrediction(id);
 
-      await logActivity(
-        req,
-        'REFRESH_HOUSEHOLD_PREDICTION',
-        `Refreshed ML prediction for household ${id}.`
-      );
+      console.log('[PREDICT ROUTE] Prediction saved. Logging activity.');
 
-      // Return the saved household values.
+      try {
+        await logActivity(
+          req,
+          'REFRESH_HOUSEHOLD_PREDICTION',
+          `Refreshed ML prediction for household ${id}.`
+        );
+      } catch (activityError) {
+        console.error('[PREDICT ROUTE] Activity log failed:', {
+          message: activityError.message,
+          code: activityError.code,
+          detail: activityError.detail,
+          stack: activityError.stack,
+        });
+
+        // Prediction has already been saved.
+        // Do not report the prediction itself as failed.
+      }
+
       const rows = await query(
         `
           SELECT
@@ -345,30 +398,39 @@ router.post(
 
       if (!rows.length) {
         return res.status(404).json({
-          error: 'Household not found after prediction.'
+          success: false,
+          error: 'Household not found after prediction.',
         });
       }
+
+      console.log('[PREDICT ROUTE] Completed successfully.');
 
       return res.json({
         success: true,
         message: 'Household prediction refreshed successfully.',
         household: rows[0],
-        prediction
+        prediction,
       });
 
     } catch (error) {
-      console.error(
-        'POST /households/:id/predict error:',
-        error
-      );
+      console.error('[PREDICT ROUTE] FAILED:', {
+        householdId: id,
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+        hint: error.hint,
+        stack: error.stack,
+      });
 
       return res.status(500).json({
+        success: false,
         error: 'Failed to refresh household prediction.',
-        details: error.message
+        details: error.message,
       });
     }
   }
 );
+
 
 
 /*
