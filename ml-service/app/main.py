@@ -1006,6 +1006,7 @@ def match_programs(
 # COLAB RANDOM FOREST PREDICTION
 # ============================================================
 
+
 def predict_one(
     row: Household,
     programs: list[Program] | None = None,
@@ -1027,6 +1028,7 @@ def predict_one(
 
     if is_solo and not members:
 
+        # SOLO HOUSEHOLD
         member_count = 1
         family_size = 1
         household_income = row.monthly_income
@@ -1036,7 +1038,6 @@ def predict_one(
         )
 
         disability = has_disability(row.disability_present)
-
         illness = has_illness(row.leading_illnesses)
 
         senior_citizen = (
@@ -1047,43 +1048,29 @@ def predict_one(
 
     elif members:
 
-        member_count = len(members)
+        # HOUSEHOLD RECORD + ADDITIONAL MEMBER RECORDS
+        member_count = len(members) + 1
+        family_size = member_count
 
-        family_size = (
-            row.family_size
-            if row.family_size is not None
-            else row.family_number
-        )
-
-        # Validate the supplied household member records.
-        if family_size is not None and member_count != family_size:
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "message": (
-                        "Household member records do not match "
-                        "the declared household size."
-                    ),
-                    "declared_family_size": family_size,
-                    "received_member_count": member_count,
-                    "action": (
-                        "Check whether all household members, "
-                        "including the household head, are included."
-                    ),
-                },
+        # TOTAL HOUSEHOLD MONTHLY INCOME
+        household_income = (
+            float(row.monthly_income or 0)
+            + sum(
+                float(member.get("monthly_income") or 0)
+                for member in members
             )
-
-        # Calculate household income from member records.
-        household_income = sum(
-            float(member.get("monthly_income") or 0)
-            for member in members
         )
 
-        all_unemployed = all(
-            normalize_rule(member.get("occupation")) == "unemployed"
-            for member in members
+        # ALL MEMBERS MUST BE EXPLICITLY UNEMPLOYED
+        all_unemployed = (
+            normalize_rule(row.occupation) == "unemployed"
+            and all(
+                normalize_rule(member.get("occupation")) == "unemployed"
+                for member in members
+            )
         )
 
+        # DISABILITY CHECK
         disability = (
             has_disability(row.disability_present)
             or any(
@@ -1092,6 +1079,7 @@ def predict_one(
             )
         )
 
+        # ILLNESS CHECK
         illness = (
             has_illness(row.leading_illnesses)
             or any(
@@ -1100,14 +1088,45 @@ def predict_one(
             )
         )
 
-        # Check the household record and supplied member ages.
+        # SENIOR CITIZEN CHECK
+        def is_senior(member):
+            member_age = member.get("age")
+
+            if member_age is not None:
+                try:
+                    return int(member_age) >= 60
+                except (ValueError, TypeError):
+                    return False
+
+            birthday = member.get("birthday")
+
+            if birthday:
+                try:
+                    birth_date = datetime.fromisoformat(
+                        str(birthday).replace("Z", "+00:00")
+                    ).date()
+
+                    today = date.today()
+
+                    age = (
+                        today.year
+                        - birth_date.year
+                        - (
+                            (today.month, today.day)
+                            < (birth_date.month, birth_date.day)
+                        )
+                    )
+
+                    return age >= 60
+
+                except (ValueError, TypeError):
+                    return False
+
+            return False
+
         senior_citizen = (
             (row.age is not None and row.age >= 60)
-            or any(
-                member.get("age") is not None
-                and int(member.get("age")) >= 60
-                for member in members
-            )
+            or any(is_senior(member) for member in members)
         )
 
         composition = "Household with member records"
@@ -1220,6 +1239,7 @@ def predict_one(
         "suggested_programs": suggested_programs,
         "probabilities": probability_result,
     }
+
 # ============================================================
 # ROOT
 # ============================================================
