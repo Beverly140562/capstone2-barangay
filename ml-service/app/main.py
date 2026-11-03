@@ -1067,21 +1067,28 @@ def get_vulnerability_chart(
             detail=f"Vulnerability chart failed: {type(exc).__name__}: {exc}",
         ) from exc
 
-
 @app.get("/analytics/charts/income")
 def get_income_chart(
     dateRange: str = Query("All Time"),
     purok: str = Query("All Puroks"),
 ):
     try:
+        print("========== INCOME CHART REQUEST ==========")
+
         records = get_chart_households(
             dateRange=dateRange,
             purok=purok,
         )
 
-        print("Income chart records:", len(records))
+        print("Records fetched:", len(records))
+
+        if records:
+            print("First record:", records[0])
+            print("Available columns:", list(records[0].keys()))
 
         image = create_income_chart(records)
+
+        print("Income chart generated successfully.")
 
         return StreamingResponse(
             image,
@@ -1091,15 +1098,12 @@ def get_income_chart(
     except Exception as exc:
         import traceback
 
-        print("INCOME CHART ERROR:")
+        print("========== INCOME CHART ERROR ==========")
         traceback.print_exc()
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                f"Income chart failed: "
-                f"{type(exc).__name__}: {exc}"
-            ),
+            detail=f"Income chart failed: {type(exc).__name__}: {exc}",
         ) from exc
 
 @app.get("/analytics/charts/relationships")

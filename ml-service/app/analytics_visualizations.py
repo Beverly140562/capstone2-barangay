@@ -80,79 +80,85 @@ def create_vulnerability_chart(records):
 
 
 def create_income_chart(records):
+    import io
+    import pandas as pd
+    import matplotlib
 
-    # Convert database records into a DataFrame.
-    df = pd.DataFrame(records)
+    matplotlib.use("Agg")
 
-    # Handle empty records.
-    if df.empty:
-        df = pd.DataFrame({
-            "household_monthly_income": []
-        })
+    import matplotlib.pyplot as plt
+    import seaborn as sns
 
-    # Ensure income is numeric.
-    if "household_monthly_income" not in df.columns:
-        df["household_monthly_income"] = 0
+    try:
+        df = pd.DataFrame(records)
 
-    df["household_monthly_income"] = pd.to_numeric(
-        df["household_monthly_income"],
-        errors="coerce"
-    )
+        if "household_monthly_income" not in df.columns:
+            raise ValueError(
+                "Missing household_monthly_income column"
+            )
 
-    # Remove missing income values.
-    df = df.dropna(
-        subset=["household_monthly_income"]
-    )
-
-    # Create chart.
-    plt.figure(figsize=(9, 5))
-
-    if not df.empty:
-
-        sns.histplot(
-            data=df,
-            x="household_monthly_income",
-            bins=20,
-            kde=len(df) > 1
+        df["household_monthly_income"] = pd.to_numeric(
+            df["household_monthly_income"],
+            errors="coerce"
         )
 
-    plt.title(
-        "Household Monthly Income Distribution",
-        fontsize=14,
-        fontweight="bold"
-    )
+        df = df.dropna(
+            subset=["household_monthly_income"]
+        )
 
-    plt.xlabel(
-        "Monthly Income (₱)",
-        fontsize=11
-    )
+        # Include zero-income households.
+        df = df[
+            df["household_monthly_income"] >= 0
+        ]
 
-    plt.ylabel(
-        "Number of Households",
-        fontsize=11
-    )
+        fig, ax = plt.subplots(figsize=(9, 5))
 
-    plt.ticklabel_format(
-        style="plain",
-        axis="x"
-    )
+        if len(df) > 0:
+            sns.histplot(
+                data=df,
+                x="household_monthly_income",
+                bins=20,
+                kde=len(df) > 1,
+                ax=ax
+            )
+        else:
+            ax.text(
+                0.5, 0.5,
+                "No household income data available",
+                ha="center",
+                va="center",
+                transform=ax.transAxes
+            )
 
-    plt.tight_layout()
+        ax.set_title(
+            "Household Monthly Income Distribution",
+            fontsize=14,
+            fontweight="bold"
+        )
 
-    # Return SVG image for FastAPI.
-    image_buffer = io.BytesIO()
+        ax.set_xlabel("Monthly Income (₱)")
+        ax.set_ylabel("Number of Households")
+        ax.ticklabel_format(
+            style="plain",
+            axis="x"
+        )
 
-    plt.savefig(
-        image_buffer,
-        format="svg",
-        bbox_inches="tight"
-    )
+        fig.tight_layout()
 
-    image_buffer.seek(0)
+        image_buffer = io.BytesIO()
 
-    plt.close()
+        fig.savefig(
+            image_buffer,
+            format="svg",
+            bbox_inches="tight"
+        )
 
-    return image_buffer
+        image_buffer.seek(0)
+
+        return image_buffer
+
+    finally:
+        plt.close("all")
 
 
 def create_feature_relationship_chart(records):
