@@ -177,7 +177,6 @@ load_model()
 
 
 class Household(BaseModel):
-    # Original household fields
     monthly_income: float | None = None
     family_number: int | None = None
     age: int | None = None
@@ -188,12 +187,12 @@ class Household(BaseModel):
     highest_education: str | None = None
     occupation: str | None = None
     residence: str | None = None
+    family_position: str | None = None
 
     disability_present: bool | None = None
     four_ps_member: str | None = None
     leading_illnesses: str | None = None
 
-    # Seven Random Forest features
     member_count: int | None = None
     family_size: int | None = None
     head_education: str | None = None
@@ -212,6 +211,7 @@ class Program(BaseModel):
 
 class PredictionRequest(BaseModel):
     household: Household
+    members: list[dict] = Field(default_factory=list)
     programs: list[Program] = Field(default_factory=list)
 
 
@@ -1018,38 +1018,126 @@ def display_vulnerability(label: str) -> str:
 def predict_one(
     row: Household,
     programs: list[Program] | None = None,
+    members: list[dict] | None = None,
 ):
     ensure_model_loaded()
 
     programs = programs or []
+    members = members or []
 
     # --------------------------------------------------------
-    # HOUSEHOLD SIZE
+    # IDENTIFY HOUSEHOLD COMPOSITION
     # --------------------------------------------------------
 
-    family_size = (
-        row.family_size
-        if row.family_size is not None
-        else row.family_number
+    family_position = normalize_rule(row.family_position)
+
+    is_solo = (
+        family_position == "solo"
+        or row.family_number == 1
+        or row.family_size == 1
     )
 
+    if is_solo and not members:
+        member_count = 1
+        family_size = 1
+        household_income = row.monthly_income
+
+        all_unemployed = (
+            normalize_rule(row.occupation) == "unemployed"
+        )
+
+        disability = has_disability(row.disability_present)
+
+        illness = bool(
+            normalize_rule(row.leading_illnesses)
+            and normalize_rule(row.leading_illnesses) not in {
+                "none", "no", "n/a", "na"
+            }
+        )
+
+        composition = "Solo household"
+
+    elif members:
+        member_count = len(members)
+
+        family_size = (
+            row.family_size
+            if row.family_size is not None
+            else row.family_number
+        )
+
+        # Use the actual member income records.
+        household_income = sum(
+            float(member.get("monthly_income") or 0)
+            for member in members
+        )
+
+        all_unemployed = all(
+            normalize_rule(member.get("occupation")) == "unemployed"
+            for member in members
+        )
+
+        disability = (
+            has_disability(row.disability_present)
+            or any(
+                has_disability(member.get("disability_present"))
+                for member in members
+            )
+        )
+
+        illness = (
+            bool(normalize_rule(row.leading_illnesses))
+            or any(
+                bool(normalize_rule(member.get("leading_illnesses")))
+                for member in members
+            )
+        )
+
+        composition = "Household with member records"
+
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Household member records are missing. "
+                "Only a confirmed solo household can be "
+                "processed without separate member records."
+            ),
+        )
+
     # --------------------------------------------------------
-    # PREPARE RANDOM FOREST INPUT
+    # HEAD EDUCATION
+    # --------------------------------------------------------
+
+    head_education = (
+        row.head_education
+        or row.highest_education
+    )
+
+    if not head_education:
+        raise HTTPException(
+            status_code=422,
+            detail="Household head education is missing."
+        )
+
+    # --------------------------------------------------------
+    # BUILD RANDOM FOREST INPUT
     # --------------------------------------------------------
 
     input_df = pd.DataFrame([{
-        "member_count": row.member_count,
-        "head_education": row.head_education,
-        "household_monthly_income": row.monthly_income,
+        "member_count": member_count,
+        "head_education": head_education,
+        "household_monthly_income": household_income,
         "family_size": family_size,
-        "all_members_explicitly_unemployed":
-            row.all_members_explicitly_unemployed,
-        "provisional_disability_indicator":
-            row.provisional_disability_indicator,
-        "illness_indicator": row.illness_indicator,
-    }])
+        "all_members_explicitly_unemployed": all_unemployed,
+        "provisional_disability_indicator": disability,
+        "illness_indicator": illness,
+    }], columns=_feature_names)
 
-    # Use the loaded model variable: _model
+    # --------------------------------------------------------
+    # RANDOM FOREST PREDICTION
+    # --------------------------------------------------------
+
     prediction = _model.predict(input_df)[0]
     probabilities = _model.predict_proba(input_df)[0]
     classes = _model.classes_
@@ -1067,57 +1155,45 @@ def predict_one(
         4
     )
 
-    # --------------------------------------------------------
-    # DEFAULT RANDOM FOREST RESULT
-    # --------------------------------------------------------
-
     vulnerability = rf_vulnerability
-    suggested_programs = []
     classification_source = "Random Forest"
 
     # --------------------------------------------------------
-    # INCOME-BASED CLASSIFICATION
+    # EXISTING INCOME CLASSIFICATION
     # --------------------------------------------------------
 
-    # --------------------------------------------------------
-    # INCOME-BASED CLASSIFICATION
-    # --------------------------------------------------------
+    if household_income is not None:
 
-    income = row.monthly_income
-
-    if income is not None:
-
-        # Below ₱10,000 = Highly Vulnerable
-        if income < 10000:
+        if household_income < 10000:
             vulnerability = "Highly Vulnerable"
             classification_source = "Income-based rule"
 
-        # ₱10,000 through ₱24,000 = Moderately Vulnerable
-        elif 10000 <= income <= 24000:
+        elif 10000 <= household_income <= 24000:
             vulnerability = "Moderately Vulnerable"
             classification_source = "Income-based rule"
 
-        # ₱25,000 and above = Low Vulnerable
-        elif income >= 25000:
+        elif household_income >= 25000:
             vulnerability = "Low Vulnerable"
             classification_source = "Income-based rule"
 
-        # ₱24,000.01 to below ₱25,000:
-        # Retain the Random Forest classification.
+    # --------------------------------------------------------
+    # ASSISTANCE PROGRAM MATCHING
+    # --------------------------------------------------------
 
-    # --------------------------------------------------------
-    # DYNAMIC ASSISTANCE PROGRAM MATCHING
-    # --------------------------------------------------------
+    # Use the same household income and family size
+    # for program matching.
+    matching_household = row.model_copy(update={
+        "monthly_income": household_income,
+        "family_size": family_size,
+        "member_count": member_count,
+        "provisional_disability_indicator": disability,
+    })
 
     suggested_programs = match_programs(
-        row,
+        matching_household,
         vulnerability,
         programs,
     )
-
-    # Income from ₱24,000.01 to below ₱25,000
-    # has no defined income bracket yet.
-    # The Random Forest result is retained for this gap.
 
     # --------------------------------------------------------
     # RESPONSE
@@ -1125,26 +1201,25 @@ def predict_one(
 
     return {
         "vulnerability": vulnerability,
-
-        # Backward-compatible field:
-        # This remains the maximum Random Forest probability.
         "vulnerability_prob": rf_probability,
 
-        # Original Random Forest result for transparency.
         "rf_vulnerability": rf_vulnerability,
         "rf_vulnerability_prob": rf_probability,
 
         "classification_source": classification_source,
+
+        "household_composition": composition,
+        "member_count": member_count,
+        "family_size": family_size,
+        "household_monthly_income": household_income,
 
         "program_eligible": (
             True if suggested_programs else None
         ),
 
         "suggested_programs": suggested_programs,
-
         "probabilities": probability_result,
     }
-
 
 # ============================================================
 # ROOT
@@ -1191,33 +1266,19 @@ def health():
 
 @app.post("/predict")
 def predict(request: PredictionRequest):
-
     try:
-
-        print(
-            "[ML] Programs received:",
-            len(request.programs)
-        )
-
-        print(
-            "[ML] Program names:",
-            [p.program_name for p in request.programs]
-        )
+        print("[ML] Household composition:", request.household.family_position)
+        print("[ML] Members received:", len(request.members))
 
         result = predict_one(
             request.household,
             request.programs,
+            request.members,
         )
 
-        print(
-            "[ML] Prediction:",
-            result["vulnerability"]
-        )
-
-        print(
-            "[ML] Suggested programs:",
-            result["suggested_programs"]
-        )
+        print("[ML] Prediction:", result["vulnerability"])
+        print("[ML] Household composition:", result["household_composition"])
+        print("[ML] Suggested programs:", result["suggested_programs"])
 
         return result
 
@@ -1225,7 +1286,6 @@ def predict(request: PredictionRequest):
         raise
 
     except Exception as exc:
-
         import traceback
         traceback.print_exc()
 
