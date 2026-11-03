@@ -79,196 +79,227 @@ def create_vulnerability_chart(records):
     return _image(svg + _svg_end())
 
 
+
 def create_income_chart(records):
-    df = pd.DataFrame(records or [])
+    values = []
 
-    if "household_monthly_income" not in df.columns:
-        raise ValueError(
-            "Missing household_monthly_income column"
-        )
+    for row in records or []:
+        value = _number(row.get("household_monthly_income"))
 
-    df["household_monthly_income"] = pd.to_numeric(
-        df["household_monthly_income"],
-        errors="coerce"
-    )
+        if value is not None and value >= 0:
+            values.append(value)
 
-    # Remove invalid income values but retain zero-income households.
-    df = df.dropna(
-        subset=["household_monthly_income"]
-    )
+    title = "Household Monthly Income Distribution"
+    svg = _svg_start(title)
 
-    df = df[
-        df["household_monthly_income"] >= 0
-    ]
-
-    # Handle empty datasets without generating a Matplotlib figure.
-    if df.empty:
-        svg = _svg_start("Household Monthly Income Distribution")
+    if not values:
         svg += '''
-        <text x="400" y="220"
-            text-anchor="middle"
-            font-family="Arial"
-            font-size="18">
+        <text x="400" y="250" text-anchor="middle"
+              font-family="Arial" font-size="18">
             No income data available
         </text>
         '''
         return _image(svg + _svg_end())
 
-    fig, ax = plt.subplots(figsize=(9, 5))
+    chart_left = 100
+    chart_top = 100
+    chart_width = 620
+    chart_height = 320
 
-    try:
-        sns.histplot(
-            data=df,
-            x="household_monthly_income",
-            bins=20,
-            kde=False,
-            ax=ax
-        )
+    minimum = min(values)
+    maximum = max(values)
 
-        ax.set_title(
-            "Household Monthly Income Distribution"
-        )
-        ax.set_xlabel(
-            "Household Monthly Income (₱)"
-        )
-        ax.set_ylabel(
-            "Number of Households"
-        )
+    # Give identical values a visible plotting range.
+    if minimum == maximum:
+        padding = max(minimum * 0.10, 1000)
+        minimum = max(0, minimum - padding)
+        maximum = maximum + padding
 
-        fig.tight_layout()
+    bin_count = min(10, max(1, len(values)))
+    bin_width = (maximum - minimum) / bin_count
 
-        image_buffer = io.BytesIO()
+    counts = [0] * bin_count
 
-        fig.savefig(
-            image_buffer,
-            format="svg",
-            bbox_inches="tight"
-        )
+    for value in values:
+        index = int((value - minimum) / bin_width)
+        index = min(index, bin_count - 1)
+        counts[index] += 1
 
-        image_buffer.seek(0)
+    maximum_count = max(counts) or 1
+    bar_width = chart_width / bin_count
 
-        return image_buffer
+    svg += f'''
+    <line x1="{chart_left}" y1="{chart_top + chart_height}"
+          x2="{chart_left + chart_width}"
+          y2="{chart_top + chart_height}"
+          stroke="#333" stroke-width="2"/>
+    <line x1="{chart_left}" y1="{chart_top}"
+          x2="{chart_left}" y2="{chart_top + chart_height}"
+          stroke="#333" stroke-width="2"/>
+    '''
 
-    finally:
-        # Always release the Matplotlib figure.
-        plt.close(fig)
-
-def create_feature_relationship_chart(records):
-    features = [
-        "monthly_income",
-        "family_number",
-        "age",
-        "length_residency",
-        "member_count",
-        "family_size",
-    ]
-
-    available = [
-        feature for feature in features
-        if any(_number(row.get(feature)) is not None for row in records)
-    ]
-
-    svg = _svg_start("Household Feature Relationships")
-
-    if len(available) < 2:
-        svg += '<text x="400" y="220" text-anchor="middle">Insufficient numeric data</text>'
-        return _image(svg + _svg_end())
-
-    data = {
-        feature: [_number(row.get(feature)) for row in records]
-        for feature in available
-    }
-
-    def correlation(a, b):
-        pairs = [
-            (x, y) for x, y in zip(data[a], data[b])
-            if x is not None and y is not None
-        ]
-
-        if len(pairs) < 2:
-            return None
-
-        xs = [p[0] for p in pairs]
-        ys = [p[1] for p in pairs]
-
-        mean_x = sum(xs) / len(xs)
-        mean_y = sum(ys) / len(ys)
-
-        numerator = sum(
-            (x - mean_x) * (y - mean_y)
-            for x, y in pairs
-        )
-
-        denominator_x = sum((x - mean_x) ** 2 for x in xs)
-        denominator_y = sum((y - mean_y) ** 2 for y in ys)
-
-        denominator = math.sqrt(denominator_x * denominator_y)
-
-        if denominator == 0:
-            return None
-
-        return numerator / denominator
-
-    cell = min(90, 300 // len(available))
-    left = 220
-    top = 85
-
-    # Draw row labels and correlation boxes
-    for i, first in enumerate(available):
-        y = top + i * cell
+    for index, count in enumerate(counts):
+        bar_height = count / maximum_count * chart_height
+        x = chart_left + index * bar_width
+        y = chart_top + chart_height - bar_height
 
         svg += f'''
-        <text x="{left - 12}" y="{y + cell / 2 + 5}"
-            text-anchor="end"
-            font-family="Arial"
-            font-size="16">{escape(first)}</text>
-        '''
-
-        for j, second in enumerate(available):
-            x = left + j * cell
-            value = correlation(first, second)
-
-            if value is None:
-                fill = "#EEEEEE"
-                label = "N/A"
-            else:
-                intensity = int(255 * (1 - abs(value)))
-
-                if value >= 0:
-                    fill = f"rgb(255,{intensity},{intensity})"
-                else:
-                    fill = f"rgb({intensity},{intensity},255)"
-
-                label = f"{value:.2f}"
-
-            svg += f'''
-            <rect x="{x}" y="{y}"
-                width="{cell - 2}"
-                height="{cell - 2}"
-                fill="{fill}"
-                stroke="#999999"/>
-
-            <text x="{x + (cell - 2) / 2}"
-                y="{y + cell / 2 + 5}"
-                text-anchor="middle"
-                font-family="Arial"
-                font-size="20">{label}</text>
-            '''
-
-    # Column labels BELOW the correlation boxes, slanted
-    for j, feature in enumerate(available):
-        x = left + j * cell + cell / 2
-        y = top + len(available) * cell + 15
-
-        svg += f'''
-        <text x="{x}" y="{y}"
-            text-anchor="end"
-            transform="rotate(-45 {x} {y})"
-            font-family="Arial"
-            font-size="20">
-            {escape(feature)}
+        <rect x="{x + 2}" y="{y}"
+              width="{max(0, bar_width - 4)}"
+              height="{bar_height}"
+              fill="#6E2430" rx="3"/>
+        <text x="{x + bar_width / 2}"
+              y="{chart_top + chart_height + 25}"
+              text-anchor="middle"
+              font-family="Arial" font-size="11">
+            {index + 1}
         </text>
         '''
 
+    svg += f'''
+    <text x="410" y="500" text-anchor="middle"
+          font-family="Arial" font-size="15">
+        Income range: ₱{minimum:,.0f} – ₱{maximum:,.0f}
+    </text>
+    <text x="25" y="260" text-anchor="middle"
+          transform="rotate(-90 25 260)"
+          font-family="Arial" font-size="14">
+        Number of households
+    </text>
+    <text x="410" y="535" text-anchor="middle"
+          font-family="Arial" font-size="13">
+        Income groups (₱)
+    </text>
+    <text x="400" y="75" text-anchor="middle"
+          font-family="Arial" font-size="13">
+        {len(values)} households
+    </text>
+    '''
+
     return _image(svg + _svg_end())
 
+
+def create_feature_relationship_chart(records):
+    """
+    Shows the relationship between household size
+    and household monthly income.
+
+    member_count is used as household size because
+    the household dataset audit confirmed that
+    declared family size matches member records.
+    """
+
+    points = []
+
+    for row in records or []:
+        family_size = _number(row.get("member_count"))
+        income = _number(row.get("household_monthly_income"))
+
+        if (
+            family_size is not None
+            and income is not None
+            and family_size >= 0
+            and income >= 0
+        ):
+            points.append((family_size, income))
+
+    svg = _svg_start("Household Size vs Monthly Income")
+
+    if not points:
+        svg += '''
+        <text x="400" y="250" text-anchor="middle"
+              font-family="Arial" font-size="18">
+            No usable household data available
+        </text>
+        '''
+        return _image(svg + _svg_end())
+
+    left = 110
+    top = 100
+    width = 600
+    height = 320
+
+    x_values = [point[0] for point in points]
+    y_values = [point[1] for point in points]
+
+    x_min = min(x_values)
+    x_max = max(x_values)
+    y_min = min(y_values)
+    y_max = max(y_values)
+
+    if x_min == x_max:
+        x_min = max(0, x_min - 1)
+        x_max = x_max + 1
+
+    if y_min == y_max:
+        padding = max(y_max * 0.10, 1000)
+        y_min = max(0, y_min - padding)
+        y_max = y_max + padding
+
+    svg += f'''
+    <line x1="{left}" y1="{top + height}"
+          x2="{left + width}" y2="{top + height}"
+          stroke="#333" stroke-width="2"/>
+    <line x1="{left}" y1="{top}"
+          x2="{left}" y2="{top + height}"
+          stroke="#333" stroke-width="2"/>
+    '''
+
+    # Plot each household as one point.
+    for family_size, income in points:
+        x = left + (
+            (family_size - x_min) / (x_max - x_min)
+        ) * width
+
+        y = top + height - (
+            (income - y_min) / (y_max - y_min)
+        ) * height
+
+        svg += f'''
+        <circle cx="{x:.2f}" cy="{y:.2f}"
+                r="6" fill="#6E2430"
+                stroke="white" stroke-width="1.5"/>
+        '''
+
+    svg += f'''
+    <text x="410" y="465" text-anchor="middle"
+          font-family="Arial" font-size="15">
+        Household size (number of members)
+    </text>
+
+    <text x="25" y="260" text-anchor="middle"
+          transform="rotate(-90 25 260)"
+          font-family="Arial" font-size="14">
+        Household monthly income (₱)
+    </text>
+
+    <text x="{left}" y="445"
+          font-family="Arial" font-size="12">
+        {x_min:g}
+    </text>
+
+    <text x="{left + width}" y="445"
+          text-anchor="end"
+          font-family="Arial" font-size="12">
+        {x_max:g}
+    </text>
+
+    <text x="{left - 10}" y="{top + height}"
+          text-anchor="end"
+          font-family="Arial" font-size="12">
+        {y_min:,.0f}
+    </text>
+
+    <text x="{left - 10}" y="{top + 10}"
+          text-anchor="end"
+          font-family="Arial" font-size="12">
+        {y_max:,.0f}
+    </text>
+
+    <text x="400" y="75" text-anchor="middle"
+          font-family="Arial" font-size="13">
+        {len(points)} households plotted
+    </text>
+    '''
+
+    return _image(svg + _svg_end())
