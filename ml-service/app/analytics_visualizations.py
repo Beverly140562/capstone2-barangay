@@ -1,8 +1,15 @@
-
 import io
 import math
 from html import escape
 
+import pandas as pd
+import matplotlib
+
+# Use a non-interactive backend for the Render server.
+matplotlib.use("Agg")
+
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 WIDTH = 800
 HEIGHT = 550
