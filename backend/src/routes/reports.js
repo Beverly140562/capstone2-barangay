@@ -390,7 +390,7 @@ const QUERIES = {
     ) = 'approved'
   `,
 
-  ddistribution: `
+  distribution: `
   SELECT
     d.distribution_id,
     d.household_id,
@@ -689,8 +689,13 @@ if (normalizedType === 'households') {
       );
     }
 
-    let sql = QUERIES.distribution;
+let sql = QUERIES[normalizedType];
 
+if (!sql || typeof sql !== 'string') {
+  throw new Error(
+    `Missing SQL query definition for report type: ${normalizedType}`
+  );
+}
     if (conditions.length > 0) {
       sql += ` WHERE ${conditions.join(' AND ')}`;
     }
