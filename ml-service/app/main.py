@@ -1069,38 +1069,22 @@ def get_vulnerability_chart(
 
 
 @app.get("/analytics/charts/income")
+@app.get("/analytics/charts/income")
 def get_income_chart(
-    dateRange: str = Query("All Time"),
-    purok: str = Query("All Puroks"),
-    startDate: str | None = Query(None),
-    endDate: str | None = Query(None),
+    dateRange: str = "All Time",
+    purok: str = "All Puroks",
 ):
-    try:
-        records = get_chart_households(
-            dateRange=dateRange,
-            purok=purok,
-            startDate=startDate,
-            endDate=endDate,
-        )
+    records = get_chart_households(
+        dateRange=dateRange,
+        purok=purok,
+    )
 
-        print("Income chart records:", len(records))
+    image = create_income_chart(records)
 
-        image = create_income_chart(records)
-
-        return StreamingResponse(
-            image,
-            media_type="image/svg+xml",
-        )
-
-    except Exception as exc:
-        import traceback
-        traceback.print_exc()
-
-        raise HTTPException(
-            status_code=500,
-            detail=f"Income chart failed: {type(exc).__name__}: {exc}",
-        ) from exc
-
+    return StreamingResponse(
+        image,
+        media_type="image/svg+xml",
+    )
 
 @app.get("/analytics/charts/relationships")
 def get_relationship_chart(
