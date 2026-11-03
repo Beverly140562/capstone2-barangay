@@ -77,6 +77,7 @@ const MEMBER_FIELDS = [
   'occupation',
   'occupation_details',
   'disability_present',
+  'monthly_income',
 ];
 
 /*

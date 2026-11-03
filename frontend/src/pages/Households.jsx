@@ -166,7 +166,7 @@ const filteredHouseholds = households.filter((household) => {
 });
 
   // Open household details.
-  // Open household details
+  // Open household details and refresh its saved ML prediction.
 const open = async (id) => {
   if (!id) {
     setError('Cannot open household: household ID is missing.');
@@ -181,9 +181,6 @@ const open = async (id) => {
       `/households/${encodeURIComponent(id)}`
     );
 
-    console.log('Household details response:', data);
-
-    // Support common response structures.
     const householdData =
       data?.household
         ? data
@@ -203,7 +200,40 @@ const open = async (id) => {
       );
     }
 
+    // Show the existing household details immediately.
     setSelected(householdData);
+
+    // Refresh the prediction and save it through the existing API route.
+    try {
+      const predictionResult = await api.post(
+        `/households/${encodeURIComponent(id)}/predict`,
+        {}
+      );
+
+      if (predictionResult?.household) {
+        setSelected((current) => {
+          if (!current) return current;
+
+          return {
+            ...current,
+            household: {
+              ...current.household,
+              ...predictionResult.household,
+            },
+          };
+        });
+      }
+    } catch (predictionError) {
+      console.error(
+        'Household details loaded, but prediction refresh failed:',
+        predictionError
+      );
+
+      setError(
+        predictionError?.message ||
+        'Household details loaded, but the ML prediction could not be refreshed.'
+      );
+    }
   } catch (err) {
     console.error('Failed to open household:', err);
     setError(err?.message || 'Failed to open household details.');
@@ -429,6 +459,11 @@ const members = Array.isArray(data?.members)
 
   if (!household) return null;
 
+  // The household record represents one person.
+// The members array contains the additional people.
+const totalFamilySize = members.length + 1;
+
+
   const canEdit =
     user?.roles === 'admin' ||
     user?.roles === 'staff';
@@ -463,7 +498,7 @@ const members = Array.isArray(data?.members)
     ['Surname', household.surname],
     ['Given Name', household.given_name],
     ['Middle Name', household.middle_name],
-    ['Family Size', household.family_number],
+    ['Family Size', totalFamilySize],
     ['Gender', household.sex],
     ['Age', household.age],
     ['Birthday', formatDate(household.birthday)],
@@ -607,7 +642,7 @@ const members = Array.isArray(data?.members)
         {/* Household Members */}
         <section className="mt-6">
           <h3 className="font-bold text-lg mb-3">
-            Household Members ({members.length})
+            Additional Household Members ({members.length})
           </h3>
 
           <div className="space-y-3">
@@ -651,6 +686,15 @@ const members = Array.isArray(data?.members)
                     label="Birthday"
                     value={formatDate(member.birthday)}
                   />
+
+                  <MemberDetail
+  label="Monthly Income"
+  value={
+    member.monthly_income != null
+      ? `₱${Number(member.monthly_income).toLocaleString('en-PH')}`
+      : '—'
+  }
+/>
                 </div>
               </div>
             ))}

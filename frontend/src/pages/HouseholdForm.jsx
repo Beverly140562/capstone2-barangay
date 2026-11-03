@@ -85,7 +85,8 @@ const EMPTY_MEMBER = {
   education_attainment: '',
   occupation: '',
   occupation_details: '',
-  disability_present: ''
+  disability_present: '',
+  monthly_income: '',
 };
 
 
@@ -462,6 +463,11 @@ const addMember = async () => {
           ? member.occupation_details?.trim() || ''
           : '',
       disability_present: member.disability_present || null,
+      monthly_income:
+  member.monthly_income === '' ||
+  member.monthly_income == null
+    ? null
+    : Number(member.monthly_income),
     };
 
     if (editingMemberId) {
@@ -536,6 +542,7 @@ const editMember = (item) => {
     occupation: item.occupation || '',
     occupation_details: item.occupation_details || '',
     disability_present: item.disability_present || '',
+    monthly_income: item.monthly_income ?? '',
   });
 
   // Temporary members are edited locally, not through the API.
@@ -874,7 +881,13 @@ if (duplicateCheck?.duplicate) {
 
             disability_present:
               memberData.disability_present?.trim() ||
-              null
+              null,
+
+            monthly_income:
+              memberData.monthly_income === '' ||
+              memberData.monthly_income == null
+                ? null
+                : Number(memberData.monthly_income)
           };
 
 
@@ -1677,6 +1690,15 @@ if (duplicateCheck?.duplicate) {
       value={member.occupation || ''}
       onChange={setM('occupation')}
     />
+
+    <Input
+  label="Monthly Income (₱)"
+  type="number"
+  min="0"
+  step="0.01"
+  value={member.monthly_income ?? ''}
+  onChange={setM('monthly_income')}
+/>
 
     {/* Disability */}
     <div>
