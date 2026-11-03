@@ -206,7 +206,7 @@ class Program(BaseModel):
     program_id: str
     program_name: str
     description: str | None = None
-    eligibility_rules: str | None = None
+    eligibility_rules: dict | str | None = None
 
 
 class PredictionRequest(BaseModel):
@@ -863,68 +863,70 @@ def match_programs(
         if not raw_rules:
             continue
 
-        # Read structured JSON rules.
-        try:
-            rules = json.loads(raw_rules)
+        # Read structured JSON rules or an existing dictionary.
+        if isinstance(raw_rules, dict):
+            rules = raw_rules
 
-            if not isinstance(rules, dict):
-                continue
+        else:
+            try:
+                rules = json.loads(raw_rules)
 
-        except (json.JSONDecodeError, TypeError):
-            # Backward compatibility for old comma-separated rules.
-            legacy = [
-                normalize_rule(item)
-                for item in str(raw_rules).split(',')
-                if item.strip()
-            ]
+                if not isinstance(rules, dict):
+                    continue
 
-            rules = {
-                "vulnerability_levels": [
-                    item.title() for item in legacy
-                    if item in [
-                        "highly vulnerable",
-                        "moderately vulnerable",
-                        "low vulnerable",
-                    ]
-                ],
-                "household_conditions": [],
-                "monthly_income_max": None,
-            }
+            except (json.JSONDecodeError, TypeError):
 
-            if "senior citizen" in legacy:
-                rules["household_conditions"].append(
-                    "senior_citizen"
-                )
+                # Backward compatibility for old comma-separated rules.
+                legacy = [
+                    normalize_rule(item)
+                    for item in str(raw_rules).split(",")
+                    if item.strip()
+                ]
 
-            if "person with disability" in legacy:
-                rules["household_conditions"].append(
-                    "person_with_disability"
-                )
+                rules = {
+                    "vulnerability_levels": [
+                        item.title()
+                        for item in legacy
+                        if item in [
+                            "highly vulnerable",
+                            "moderately vulnerable",
+                            "low vulnerable",
+                        ]
+                    ],
+                    "household_conditions": [],
+                    "monthly_income_max": None,
+                }
 
-            if "family size >= 6" in legacy:
-                rules["household_conditions"].append(
-                    "family_size_gte_6"
-                )
+                if "senior citizen" in legacy:
+                    rules["household_conditions"].append(
+                        "senior_citizen"
+                    )
 
-            if "family size >= 5" in legacy:
-                rules["household_conditions"].append(
-                    "family_size_gte_5"
-                )
+                if "person with disability" in legacy:
+                    rules["household_conditions"].append(
+                        "person_with_disability"
+                    )
 
-            for item in legacy:
-                if item.startswith("monthly income <="):
-                    try:
-                        rules["monthly_income_max"] = float(
-                            item.split("<=", 1)[1].strip()
-                        )
-                    except ValueError:
-                        pass
+                if "family size >= 6" in legacy:
+                    rules["household_conditions"].append(
+                        "family_size_gte_6"
+                    )
 
-        # ------------------------------------------------
+                if "family size >= 5" in legacy:
+                    rules["household_conditions"].append(
+                        "family_size_gte_5"
+                    )
+
+                for item in legacy:
+                    if item.startswith("monthly income <="):
+                        try:
+                            rules["monthly_income_max"] = float(
+                                item.split("<=", 1)[1].strip()
+                            )
+                        except ValueError:
+                            pass
+
         # VULNERABILITY GROUP
-        # OR within the group
-        # ------------------------------------------------
-
         vulnerability_levels = rules.get(
             "vulnerability_levels", []
         )
@@ -937,11 +939,7 @@ def match_programs(
             ]
         )
 
-        # ------------------------------------------------
         # HOUSEHOLD CONDITIONS GROUP
-        # OR within the group
-        # ------------------------------------------------
-
         conditions = rules.get(
             "household_conditions", []
         )
@@ -949,35 +947,34 @@ def match_programs(
         condition_results = []
 
         for condition in conditions:
-    condition = normalize_rule(condition)
 
-    if condition == "senior_citizen":
-        condition_results.append(senior is True)
+            condition = normalize_rule(condition)
 
-    elif condition == "person_with_disability":
-        condition_results.append(disability is True)
+            if condition == "senior_citizen":
+                condition_results.append(senior is True)
 
-    elif condition == "family_size_gte_6":
-        condition_results.append(
-            family_size is not None and family_size >= 6
-        )
+            elif condition == "person_with_disability":
+                condition_results.append(disability is True)
 
-    elif condition == "family_size_gte_5":
-        condition_results.append(
-            family_size is not None and family_size >= 5
-        )
+            elif condition == "family_size_gte_6":
+                condition_results.append(
+                    family_size is not None and family_size >= 6
+                )
 
-    else:
-        condition_results.append(False)
+            elif condition == "family_size_gte_5":
+                condition_results.append(
+                    family_size is not None and family_size >= 5
+                )
+
+            else:
+                # Unknown conditions must not qualify.
+                condition_results.append(False)
 
         household_match = (
             not conditions or any(condition_results)
         )
 
-        # ------------------------------------------------
         # MONTHLY INCOME GROUP
-        # ------------------------------------------------
-
         income_limit = rules.get("monthly_income_max")
 
         income_match = (
@@ -988,10 +985,7 @@ def match_programs(
             )
         )
 
-        # ------------------------------------------------
-        # ALL SELECTED GROUPS MUST MATCH
-        # ------------------------------------------------
-
+        # ALL CONFIGURED GROUPS MUST MATCH
         eligible = (
             vulnerability_match
             and household_match
@@ -1003,27 +997,10 @@ def match_programs(
                 "program_id": program.program_id,
                 "program_name": program.program_name,
                 "description": program.description,
-                "eligibility_rules": program.eligibility_rules,
+                "eligibility_rules": raw_rules,
             })
 
     return matched_programs
-
-
-
-# ============================================================
-# VULNERABILITY LABEL MAPPING
-# ============================================================
-
-def display_vulnerability(label: str) -> str:
-
-    mapping = {
-        "High": "Highly Vulnerable",
-        "Medium": "Moderately Vulnerable",
-        "Low": "Low Vulnerable",
-    }
-
-    return mapping.get(label, label)
-
 
 # ============================================================
 # COLAB RANDOM FOREST PREDICTION
@@ -1039,10 +1016,7 @@ def predict_one(
     programs = programs or []
     members = members or []
 
-    # --------------------------------------------------------
     # IDENTIFY HOUSEHOLD COMPOSITION
-    # --------------------------------------------------------
-
     family_position = normalize_rule(row.family_position)
 
     is_solo = (
@@ -1052,6 +1026,7 @@ def predict_one(
     )
 
     if is_solo and not members:
+
         member_count = 1
         family_size = 1
         household_income = row.monthly_income
@@ -1062,16 +1037,15 @@ def predict_one(
 
         disability = has_disability(row.disability_present)
 
-        illness = bool(
-            normalize_rule(row.leading_illnesses)
-            and normalize_rule(row.leading_illnesses) not in {
-                "none", "no", "n/a", "na"
-            }
+        illness = has_illness(row.leading_illnesses)
+
+        senior_citizen = (
+            row.age is not None and row.age >= 60
         )
 
         composition = "Solo household"
 
-        elif members:
+    elif members:
 
         member_count = len(members)
 
@@ -1081,7 +1055,7 @@ def predict_one(
             else row.family_number
         )
 
-        # Do not silently predict using incomplete member records.
+        # Validate the supplied household member records.
         if family_size is not None and member_count != family_size:
             raise HTTPException(
                 status_code=422,
@@ -1099,7 +1073,7 @@ def predict_one(
                 },
             )
 
-        # Calculate household income from the supplied member records.
+        # Calculate household income from member records.
         household_income = sum(
             float(member.get("monthly_income") or 0)
             for member in members
@@ -1118,16 +1092,28 @@ def predict_one(
             )
         )
 
-        illness = has_illness(row.leading_illnesses)
+        illness = (
+            has_illness(row.leading_illnesses)
+            or any(
+                has_illness(member.get("leading_illnesses"))
+                for member in members
+            )
+        )
 
-        # Check whether any household member is a senior citizen.
+        # Check the household record and supplied member ages.
         senior_citizen = (
-    row.age is not None and row.age >= 60
-)
+            (row.age is not None and row.age >= 60)
+            or any(
+                member.get("age") is not None
+                and int(member.get("age")) >= 60
+                for member in members
+            )
+        )
 
         composition = "Household with member records"
 
     else:
+
         raise HTTPException(
             status_code=422,
             detail=(
@@ -1137,10 +1123,7 @@ def predict_one(
             ),
         )
 
-    # --------------------------------------------------------
     # HEAD EDUCATION
-    # --------------------------------------------------------
-
     head_education = (
         row.head_education
         or row.highest_education
@@ -1149,13 +1132,10 @@ def predict_one(
     if not head_education:
         raise HTTPException(
             status_code=422,
-            detail="Household head education is missing."
+            detail="Household head education is missing.",
         )
 
-    # --------------------------------------------------------
     # BUILD RANDOM FOREST INPUT
-    # --------------------------------------------------------
-
     input_df = pd.DataFrame([{
         "member_count": member_count,
         "head_education": head_education,
@@ -1166,10 +1146,7 @@ def predict_one(
         "illness_indicator": illness,
     }], columns=_feature_names)
 
-    # --------------------------------------------------------
     # RANDOM FOREST PREDICTION
-    # --------------------------------------------------------
-
     prediction = _model.predict(input_df)[0]
     probabilities = _model.predict_proba(input_df)[0]
     classes = _model.classes_
@@ -1184,16 +1161,13 @@ def predict_one(
 
     rf_probability = round(
         float(max(probabilities)),
-        4
+        4,
     )
 
     vulnerability = rf_vulnerability
     classification_source = "Random Forest"
 
-    # --------------------------------------------------------
     # EXISTING INCOME CLASSIFICATION
-    # --------------------------------------------------------
-
     if household_income is not None:
 
         if household_income < 10000:
@@ -1208,13 +1182,8 @@ def predict_one(
             vulnerability = "Low Vulnerable"
             classification_source = "Income-based rule"
 
-    # --------------------------------------------------------
-    # ASSISTANCE PROGRAM MATCHING
-    # --------------------------------------------------------
-
-    # Use the same household income and family size
-    # for program matching.
-        matching_household = row.model_copy(update={
+    # PREPARE HOUSEHOLD DATA FOR PROGRAM MATCHING
+    matching_household = row.model_copy(update={
         "monthly_income": household_income,
         "family_size": family_size,
         "member_count": member_count,
@@ -1229,10 +1198,7 @@ def predict_one(
         programs,
     )
 
-    # --------------------------------------------------------
     # RESPONSE
-    # --------------------------------------------------------
-
     return {
         "vulnerability": vulnerability,
         "vulnerability_prob": rf_probability,
@@ -1254,7 +1220,6 @@ def predict_one(
         "suggested_programs": suggested_programs,
         "probabilities": probability_result,
     }
-
 # ============================================================
 # ROOT
 # ============================================================
