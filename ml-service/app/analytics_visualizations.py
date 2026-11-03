@@ -73,63 +73,79 @@ def create_vulnerability_chart(records):
 
 
 def create_income_chart(records):
-    values = [
-        value for value in
-        (_number(row.get("monthly_income")) for row in records)
-        if value is not None
-    ]
 
-    svg = _svg_start("Household Monthly Income Distribution")
+    # Convert database records into a DataFrame.
+    df = pd.DataFrame(records)
 
-    if not values:
-        svg += '<text x="400" y="220" text-anchor="middle">No income data available</text>'
-        return _image(svg + _svg_end())
+    # Handle empty records.
+    if df.empty:
+        df = pd.DataFrame({
+            "household_monthly_income": []
+        })
 
-    minimum = min(values)
-    maximum = max(values)
-    bins = 10
+    # Ensure income is numeric.
+    if "household_monthly_income" not in df.columns:
+        df["household_monthly_income"] = 0
 
-    if minimum == maximum:
-        counts = [0] * bins
-        counts[0] = len(values)
-    else:
-        counts = [0] * bins
-        for value in values:
-            index = int((value - minimum) / (maximum - minimum) * bins)
-            index = min(index, bins - 1)
-            counts[index] += 1
+    df["household_monthly_income"] = pd.to_numeric(
+        df["household_monthly_income"],
+        errors="coerce"
+    )
 
-    max_count = max(counts) or 1
-    chart_x = 90
-    chart_y = 100
-    chart_width = 620
-    chart_height = 250
-    bar_width = chart_width / bins
+    # Remove missing income values.
+    df = df.dropna(
+        subset=["household_monthly_income"]
+    )
 
-    for index, count in enumerate(counts):
-        height = count / max_count * chart_height
-        x = chart_x + index * bar_width
-        y = chart_y + chart_height - height
+    # Create chart.
+    plt.figure(figsize=(9, 5))
 
-        svg += f'''
-        <rect x="{x + 3:.2f}" y="{y:.2f}"
-            width="{bar_width - 6:.2f}" height="{height:.2f}"
-            fill="#6E2430"/>
-        <text x="{x + bar_width / 2:.2f}"
-            y="{chart_y + chart_height + 22}"
-            text-anchor="middle" font-family="Arial"
-            font-size="18">{count}</text>
-        '''
+    if not df.empty:
 
-    svg += f'''
-    <text x="400" y="405" text-anchor="middle"
-        font-family="Arial" font-size="20">
-        Monthly income range: {minimum:,.0f} - {maximum:,.0f}
-    </text>
-    '''
+        sns.histplot(
+            data=df,
+            x="household_monthly_income",
+            bins=20,
+            kde=len(df) > 1
+        )
 
-    return _image(svg + _svg_end())
+    plt.title(
+        "Household Monthly Income Distribution",
+        fontsize=14,
+        fontweight="bold"
+    )
 
+    plt.xlabel(
+        "Monthly Income (₱)",
+        fontsize=11
+    )
+
+    plt.ylabel(
+        "Number of Households",
+        fontsize=11
+    )
+
+    plt.ticklabel_format(
+        style="plain",
+        axis="x"
+    )
+
+    plt.tight_layout()
+
+    # Return SVG image for FastAPI.
+    image_buffer = io.BytesIO()
+
+    plt.savefig(
+        image_buffer,
+        format="svg",
+        bbox_inches="tight"
+    )
+
+    image_buffer.seek(0)
+
+    plt.close()
+
+    return image_buffer
 
 
 def create_feature_relationship_chart(records):

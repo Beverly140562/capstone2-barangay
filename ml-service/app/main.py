@@ -12,6 +12,8 @@ from pathlib import Path
 from datetime import date, datetime, timedelta
 
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -989,17 +991,36 @@ def get_chart_households(
     endDate=None,
 ):
     records = fetch_all("""
-    SELECT
-        household_id,
-        purok,
-        vulnerability,
-        monthly_income,
-        family_number,
-        age,
-        length_residency,
-        created_at
-    FROM households
-""")
+        SELECT
+            h.household_id,
+            h.purok,
+            h.vulnerability,
+            h.family_number,
+            h.age,
+            h.length_residency,
+            h.created_at,
+
+            COALESCE(
+                SUM(
+                    COALESCE(hm.monthly_income, 0)
+                ),
+                0
+            ) AS household_monthly_income
+
+        FROM households h
+
+        LEFT JOIN household_members hm
+            ON hm.household_id = h.household_id
+
+        GROUP BY
+            h.household_id,
+            h.purok,
+            h.vulnerability,
+            h.family_number,
+            h.age,
+            h.length_residency,
+            h.created_at
+    """)
 
     return filter_records(
         records,
