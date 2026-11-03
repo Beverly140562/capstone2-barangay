@@ -606,6 +606,169 @@ def analytics(
             detail=f"Analytics failed: {type(e).__name__}: {e}",
         ) from e
 
+
+
+# ============================================================
+# ANALYTICS CHART ENDPOINTS
+# ============================================================
+
+def get_chart_households():
+    """
+    Retrieve actual household-level data for charts.
+    Income is calculated by summing household members'
+    monthly income.
+    """
+
+    return fetch_all("""
+        SELECT
+            h.household_id,
+            h.purok,
+            h.vulnerability,
+            h.created_at,
+            COUNT(hm.household_id) AS member_count,
+            COALESCE(
+                SUM(COALESCE(hm.monthly_income, 0)),
+                0
+            ) AS household_monthly_income
+        FROM households h
+        LEFT JOIN household_members hm
+            ON hm.household_id = h.household_id
+        GROUP BY
+            h.household_id,
+            h.purok,
+            h.vulnerability,
+            h.created_at
+        ORDER BY h.created_at DESC
+    """)
+
+
+def generate_chart_response(chart_function, records):
+    """
+    Convert the chart function's BytesIO result
+    into an SVG HTTP response.
+    """
+
+    image_buffer = chart_function(records)
+
+    image_buffer.seek(0)
+
+    return StreamingResponse(
+        image_buffer,
+        media_type="image/svg+xml",
+        headers={
+            "Cache-Control": "no-cache"
+        }
+    )
+
+
+def get_filtered_chart_records(
+    dateRange="All Time",
+    purok="All Puroks",
+    startDate=None,
+    endDate=None,
+):
+    records = get_chart_households()
+
+    return filter_records(
+        records,
+        date_range=dateRange,
+        purok=purok,
+        start_date=startDate,
+        end_date=endDate,
+        date_field="created_at",
+    )
+
+
+@app.get("/analytics/charts/vulnerability")
+def vulnerability_chart(
+    dateRange: str = Query("All Time"),
+    purok: str = Query("All Puroks"),
+    startDate: str | None = Query(None),
+    endDate: str | None = Query(None),
+):
+    try:
+        records = get_filtered_chart_records(
+            dateRange,
+            purok,
+            startDate,
+            endDate,
+        )
+
+        return generate_chart_response(
+            create_vulnerability_chart,
+            records,
+        )
+
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Vulnerability chart failed: {type(exc).__name__}: {exc}",
+        ) from exc
+
+
+@app.get("/analytics/charts/income")
+def income_chart(
+    dateRange: str = Query("All Time"),
+    purok: str = Query("All Puroks"),
+    startDate: str | None = Query(None),
+    endDate: str | None = Query(None),
+):
+    try:
+        records = get_filtered_chart_records(
+            dateRange,
+            purok,
+            startDate,
+            endDate,
+        )
+
+        return generate_chart_response(
+            create_income_chart,
+            records,
+        )
+
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Income chart failed: {type(exc).__name__}: {exc}",
+        ) from exc
+
+
+@app.get("/analytics/charts/relationships")
+def relationships_chart(
+    dateRange: str = Query("All Time"),
+    purok: str = Query("All Puroks"),
+    startDate: str | None = Query(None),
+    endDate: str | None = Query(None),
+):
+    try:
+        records = get_filtered_chart_records(
+            dateRange,
+            purok,
+            startDate,
+            endDate,
+        )
+
+        return generate_chart_response(
+            create_feature_relationship_chart,
+            records,
+        )
+
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Relationships chart failed: {type(exc).__name__}: {exc}",
+        ) from exc
+
+
 # ============================================================
 # PROGRAM MATCHING
 # ============================================================

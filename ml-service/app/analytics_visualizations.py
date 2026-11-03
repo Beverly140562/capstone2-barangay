@@ -174,23 +174,16 @@ def create_income_chart(records):
     return _image(svg + _svg_end())
 
 
+
 def create_feature_relationship_chart(records):
     """
-    Correlation heatmap using actual household scoring columns.
-    Missing columns are reported, never invented or filled with zero.
+    Correlation heatmap using actual numeric household data.
+    Does not invent scoring columns, weights, or values.
     """
 
     numeric_columns = [
         "member_count",
         "household_monthly_income",
-        "family_size",
-        "income_points",
-        "family_size_points",
-        "employment_points",
-        "education_points",
-        "provisional_disability_points",
-        "illness_points",
-        "total_score",
     ]
 
     svg = _svg_start("Household Data Correlation Heatmap")
@@ -199,42 +192,34 @@ def create_feature_relationship_chart(records):
         svg += '''
         <text x="400" y="250" text-anchor="middle"
               font-family="Arial" font-size="18">
-            No household scoring data available
+            No household data available
         </text>
         '''
         return _image(svg + _svg_end())
 
     df = pd.DataFrame(records)
 
-    missing = [c for c in numeric_columns if c not in df.columns]
+    available = [
+        column for column in numeric_columns
+        if column in df.columns
+    ]
 
-    if missing:
+    if len(available) < 2:
         svg += '''
-        <text x="400" y="100" text-anchor="middle"
-              font-family="Arial" font-size="16">
-            Heatmap requires the actual scoring columns.
-        </text>
-        <text x="400" y="130" text-anchor="middle"
-              font-family="Arial" font-size="13">
-            These columns are not returned by the current chart query:
+        <text x="400" y="250" text-anchor="middle"
+              font-family="Arial" font-size="17">
+            Not enough numeric household features.
         </text>
         '''
-
-        for index, column in enumerate(missing):
-            svg += f'''
-            <text x="400" y="{165 + index * 25}"
-                  text-anchor="middle"
-                  font-family="Arial" font-size="13">
-                {escape(column)}
-            </text>
-            '''
-
         return _image(svg + _svg_end())
 
-    data = df[numeric_columns].apply(pd.to_numeric, errors="coerce")
+    data = df[available].apply(
+        pd.to_numeric,
+        errors="coerce"
+    )
 
     usable = [
-        column for column in numeric_columns
+        column for column in available
         if data[column].notna().sum() >= 2
         and data[column].nunique() > 1
     ]
@@ -243,26 +228,25 @@ def create_feature_relationship_chart(records):
         svg += '''
         <text x="400" y="250" text-anchor="middle"
               font-family="Arial" font-size="17">
-            Not enough varied numeric data for correlation.
+            Not enough varied data for correlation.
         </text>
         '''
         return _image(svg + _svg_end())
 
     correlation = data[usable].corr()
     columns = list(correlation.columns)
-    count = len(columns)
 
-    # Fit the heatmap inside the SVG canvas.
-    cell = min(42, 390 / count)
-    left = 260
-    top = 155
+    cell = 130
+    left = 250
+    top = 180
 
     for row_index, row_name in enumerate(columns):
         y = top + row_index * cell
 
         svg += f'''
-        <text x="{left - 8}" y="{y + cell / 2 + 4}"
-              text-anchor="end" font-family="Arial" font-size="10">
+        <text x="{left - 12}" y="{y + cell / 2 + 5}"
+              text-anchor="end"
+              font-family="Arial" font-size="14">
             {escape(row_name)}
         </text>
         '''
@@ -275,44 +259,39 @@ def create_feature_relationship_chart(records):
                 label = "N/A"
             else:
                 intensity = int(abs(value) * 255)
+
                 if value < 0:
-                    color = f"rgb(255,{255-intensity},{255-intensity})"
+                    color = (
+                        f"rgb(255,{255-intensity},"
+                        f"{255-intensity})"
+                    )
                 else:
-                    color = f"rgb({255-intensity},{255-intensity},255)"
+                    color = (
+                        f"rgb({255-intensity},"
+                        f"{255-intensity},255)"
+                    )
+
                 label = f"{value:.2f}"
 
             x = left + col_index * cell
 
             svg += f'''
-            <rect x="{x:.2f}" y="{y:.2f}"
-                  width="{cell:.2f}" height="{cell:.2f}"
-                  fill="{color}" stroke="white" stroke-width="1"/>
-            <text x="{x + cell / 2:.2f}"
-                  y="{y + cell / 2 + 3:.2f}"
+            <rect x="{x}" y="{y}"
+                  width="{cell}" height="{cell}"
+                  fill="{color}"
+                  stroke="white" stroke-width="2"/>
+            <text x="{x + cell / 2}"
+                  y="{y + cell / 2 + 5}"
                   text-anchor="middle"
-                  font-family="Arial" font-size="9">
+                  font-family="Arial" font-size="18">
                 {label}
             </text>
             '''
 
-    # Rotated column labels.
-    for col_index, column in enumerate(columns):
-        x = left + col_index * cell + cell / 2
-        label_y = top - 8
-
-        svg += f'''
-        <text x="{x:.2f}" y="{label_y}"
-              text-anchor="start"
-              transform="rotate(-55 {x:.2f} {label_y})"
-              font-family="Arial" font-size="9">
-            {escape(column)}
-        </text>
-        '''
-
     svg += f'''
-    <text x="400" y="625" text-anchor="middle"
-          font-family="Arial" font-size="12">
-        Pearson correlation coefficient | {len(data)} household records
+    <text x="400" y="570" text-anchor="middle"
+          font-family="Arial" font-size="13">
+        Pearson correlation | {len(data)} household records
     </text>
     '''
 
