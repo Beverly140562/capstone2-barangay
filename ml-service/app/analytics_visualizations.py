@@ -181,124 +181,151 @@ def create_income_chart(records):
 
 def create_feature_relationship_chart(records):
     """
-    Shows the relationship between household size
-    and household monthly income.
-
-    member_count is used as household size because
-    the household dataset audit confirmed that
-    declared family size matches member records.
+    Household Feature Relationships:
+    Correlation heatmap using actual household scoring data.
+    Missing features are not fabricated or filled with zero.
     """
 
-    points = []
+    numeric_columns = [
+        "member_count",
+        "household_monthly_income",
+        "family_size",
+        "income_points",
+        "family_size_points",
+        "employment_points",
+        "education_points",
+        "provisional_disability_points",
+        "illness_points",
+        "total_score"
+    ]
 
-    for row in records or []:
-        family_size = _number(row.get("member_count"))
-        income = _number(row.get("household_monthly_income"))
+    title = "Household Data Correlation Heatmap"
+    svg = _svg_start(title)
 
-        if (
-            family_size is not None
-            and income is not None
-            and family_size >= 0
-            and income >= 0
-        ):
-            points.append((family_size, income))
-
-    svg = _svg_start("Household Size vs Monthly Income")
-
-    if not points:
+    if not records:
         svg += '''
         <text x="400" y="250" text-anchor="middle"
               font-family="Arial" font-size="18">
-            No usable household data available
+            No household scoring data available
         </text>
         '''
         return _image(svg + _svg_end())
 
-    left = 110
+    df = pd.DataFrame(records)
+
+    missing = [
+        column for column in numeric_columns
+        if column not in df.columns
+    ]
+
+    if missing:
+        svg += '''
+        <text x="400" y="140" text-anchor="middle"
+              font-family="Arial" font-size="17">
+            Required scoring features are missing
+        </text>
+        '''
+
+        for index, column in enumerate(missing):
+            svg += f'''
+            <text x="400" y="{180 + index * 25}"
+                  text-anchor="middle"
+                  font-family="Arial" font-size="13">
+                {escape(column)}
+            </text>
+            '''
+
+        return _image(svg + _svg_end())
+
+    # Convert only actual values to numeric.
+    data = df[numeric_columns].apply(
+        pd.to_numeric, errors="coerce"
+    )
+
+    # Remove columns without usable variation.
+    usable_columns = [
+        column for column in numeric_columns
+        if data[column].notna().sum() >= 2
+        and data[column].nunique() > 1
+    ]
+
+    if len(usable_columns) < 2:
+        svg += '''
+        <text x="400" y="250" text-anchor="middle"
+              font-family="Arial" font-size="17">
+            Not enough varied numeric data for correlation
+        </text>
+        '''
+        return _image(svg + _svg_end())
+
+    correlation = data[usable_columns].corr()
+
+    columns = list(correlation.columns)
+    count = len(columns)
+
+    cell = min(48, 480 / count)
+    left = 220
     top = 100
-    width = 600
-    height = 320
 
-    x_values = [point[0] for point in points]
-    y_values = [point[1] for point in points]
+    # Heatmap cells and correlation values.
+    for row_index, row_name in enumerate(columns):
+        for col_index, col_name in enumerate(columns):
+            value = correlation.loc[row_name, col_name]
 
-    x_min = min(x_values)
-    x_max = max(x_values)
-    y_min = min(y_values)
-    y_max = max(y_values)
+            if pd.isna(value):
+                continue
 
-    if x_min == x_max:
-        x_min = max(0, x_min - 1)
-        x_max = x_max + 1
+            # Red = negative, white = zero, blue = positive.
+            intensity = int(abs(value) * 255)
 
-    if y_min == y_max:
-        padding = max(y_max * 0.10, 1000)
-        y_min = max(0, y_min - padding)
-        y_max = y_max + padding
+            if value < 0:
+                color = f"rgb(255,{255-intensity},{255-intensity})"
+            else:
+                color = f"rgb({255-intensity},{255-intensity},255)"
 
-    svg += f'''
-    <line x1="{left}" y1="{top + height}"
-          x2="{left + width}" y2="{top + height}"
-          stroke="#333" stroke-width="2"/>
-    <line x1="{left}" y1="{top}"
-          x2="{left}" y2="{top + height}"
-          stroke="#333" stroke-width="2"/>
-    '''
+            x = left + col_index * cell
+            y = top + row_index * cell
 
-    # Plot each household as one point.
-    for family_size, income in points:
-        x = left + (
-            (family_size - x_min) / (x_max - x_min)
-        ) * width
+            svg += f'''
+            <rect x="{x}" y="{y}"
+                  width="{cell}" height="{cell}"
+                  fill="{color}"
+                  stroke="white" stroke-width="1"/>
 
-        y = top + height - (
-            (income - y_min) / (y_max - y_min)
-        ) * height
+            <text x="{x + cell/2}" y="{y + cell/2 + 4}"
+                  text-anchor="middle"
+                  font-family="Arial" font-size="10">
+                {value:.2f}
+            </text>
+            '''
+
+        label_y = top + row_index * cell + cell / 2 + 4
 
         svg += f'''
-        <circle cx="{x:.2f}" cy="{y:.2f}"
-                r="6" fill="#6E2430"
-                stroke="white" stroke-width="1.5"/>
+        <text x="{left - 8}" y="{label_y}"
+              text-anchor="end"
+              font-family="Arial" font-size="10">
+            {escape(row_name)}
+        </text>
+        '''
+
+    # Rotated column labels.
+    for col_index, column in enumerate(columns):
+        x = left + col_index * cell + cell / 2
+
+        svg += f'''
+        <text x="{x}" y="{top - 8}"
+              text-anchor="start"
+              transform="rotate(-55 {x} {top - 8})"
+              font-family="Arial" font-size="10">
+            {escape(column)}
+        </text>
         '''
 
     svg += f'''
-    <text x="410" y="465" text-anchor="middle"
-          font-family="Arial" font-size="15">
-        Household size (number of members)
-    </text>
-
-    <text x="25" y="260" text-anchor="middle"
-          transform="rotate(-90 25 260)"
-          font-family="Arial" font-size="14">
-        Household monthly income (₱)
-    </text>
-
-    <text x="{left}" y="445"
+    <text x="400" y="530" text-anchor="middle"
           font-family="Arial" font-size="12">
-        {x_min:g}
-    </text>
-
-    <text x="{left + width}" y="445"
-          text-anchor="end"
-          font-family="Arial" font-size="12">
-        {x_max:g}
-    </text>
-
-    <text x="{left - 10}" y="{top + height}"
-          text-anchor="end"
-          font-family="Arial" font-size="12">
-        {y_min:,.0f}
-    </text>
-
-    <text x="{left - 10}" y="{top + 10}"
-          text-anchor="end"
-          font-family="Arial" font-size="12">
-        {y_max:,.0f}
-    </text>
-
-    <text x="400" y="75" text-anchor="middle"
-          font-family="Arial" font-size="13">
-        {len(points)} households plotted
+        Correlation coefficient (Pearson)
     </text>
     '''
 
