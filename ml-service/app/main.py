@@ -224,6 +224,22 @@ class BatchPredictionRequest(BaseModel):
 # ============================================================
 # DISABILITY HELPER
 # ============================================================
+def has_illness(value) -> bool:
+    if value is None:
+        return False
+
+    normalized = normalize_rule(value)
+
+    return normalized not in {
+        "",
+        "none",
+        "no",
+        "n/a",
+        "na",
+        "null",
+        "not specified",
+    }
+
 
 
 def has_disability(value) -> bool:
@@ -933,28 +949,26 @@ def match_programs(
         condition_results = []
 
         for condition in conditions:
+    condition = normalize_rule(condition)
 
-            if condition == "senior_citizen":
-                condition_results.append(senior is True)
+    if condition == "senior_citizen":
+        condition_results.append(senior is True)
 
-            elif condition == "person_with_disability":
-                condition_results.append(disability is True)
+    elif condition == "person_with_disability":
+        condition_results.append(disability is True)
 
-            elif condition == "family_size_gte_6":
-                condition_results.append(
-                    family_size is not None
-                    and family_size >= 6
-                )
+    elif condition == "family_size_gte_6":
+        condition_results.append(
+            family_size is not None and family_size >= 6
+        )
 
-            elif condition == "family_size_gte_5":
-                condition_results.append(
-                    family_size is not None
-                    and family_size >= 5
-                )
+    elif condition == "family_size_gte_5":
+        condition_results.append(
+            family_size is not None and family_size >= 5
+        )
 
-            else:
-                # Unknown condition must not qualify a household.
-                condition_results.append(False)
+    else:
+        condition_results.append(False)
 
         household_match = (
             not conditions or any(condition_results)
@@ -1057,7 +1071,8 @@ def predict_one(
 
         composition = "Solo household"
 
-    elif members:
+        elif members:
+
         member_count = len(members)
 
         family_size = (
@@ -1066,7 +1081,25 @@ def predict_one(
             else row.family_number
         )
 
-        # Use the actual member income records.
+        # Do not silently predict using incomplete member records.
+        if family_size is not None and member_count != family_size:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": (
+                        "Household member records do not match "
+                        "the declared household size."
+                    ),
+                    "declared_family_size": family_size,
+                    "received_member_count": member_count,
+                    "action": (
+                        "Check whether all household members, "
+                        "including the household head, are included."
+                    ),
+                },
+            )
+
+        # Calculate household income from the supplied member records.
         household_income = sum(
             float(member.get("monthly_income") or 0)
             for member in members
@@ -1085,13 +1118,12 @@ def predict_one(
             )
         )
 
-        illness = (
-            bool(normalize_rule(row.leading_illnesses))
-            or any(
-                bool(normalize_rule(member.get("leading_illnesses")))
-                for member in members
-            )
-        )
+        illness = has_illness(row.leading_illnesses)
+
+        # Check whether any household member is a senior citizen.
+        senior_citizen = (
+    row.age is not None and row.age >= 60
+)
 
         composition = "Household with member records"
 
@@ -1182,11 +1214,13 @@ def predict_one(
 
     # Use the same household income and family size
     # for program matching.
-    matching_household = row.model_copy(update={
+        matching_household = row.model_copy(update={
         "monthly_income": household_income,
         "family_size": family_size,
         "member_count": member_count,
         "provisional_disability_indicator": disability,
+        "illness_indicator": illness,
+        "senior_citizen_present": senior_citizen,
     })
 
     suggested_programs = match_programs(
