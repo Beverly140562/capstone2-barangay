@@ -318,33 +318,46 @@ if (reportType === 'households') {
       'head_name',
       'name',
     ]),
-
     column('Purok', [
       'purok',
       'purok_number',
       'purok_name',
     ]),
-
     column('Assistance Program', [
       'program_name',
       'assistance_program',
       'program',
       'program_title',
     ]),
-
-    column('Amount / Quantity', [
+    column('Amount Released', [
       'amount_released',
+    ], (value) => {
+      if (
+        value === null ||
+        value === undefined ||
+        value === ''
+      ) {
+        return '—';
+      }
+
+      const amount = Number(value);
+
+      return Number.isFinite(amount)
+        ? `₱ ${amount.toLocaleString('en-PH', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}`
+        : String(value);
+    }),
+    column('Release Status', [
+      'release_status',
     ]),
-
-    {
-      header: 'Release Status',
-      value: (row) => getDistributionStatus(row),
-    },
-
-    {
-      header: 'Distribution Period',
-      value: (row) => getDistributionPeriod(row),
-    },
+    column('Distribution Period', [
+      'period_start',
+    ], (_, row) => getDistributionPeriod(row)),
+    column('Release Date', [
+      'release_date',
+    ], formatDate),
   ];
 }
 
@@ -801,6 +814,40 @@ doc.setFillColor(...barColor);
     8
   );
 }
+function getDistributionPeriodRange(
+  periodType,
+  month,
+  startDate,
+  endDate
+) {
+  if (periodType === 'Monthly Distribution') {
+  if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+    return {
+      periodStart: '',
+      periodEnd: '',
+    };
+  }
+
+  const [year, monthNumber] = month.split('-').map(Number);
+
+  const lastDay = new Date(
+    year,
+    monthNumber,
+    0
+  ).getDate();
+
+  return {
+    periodStart: `${month}-01`,
+    periodEnd: `${month}-${String(lastDay).padStart(2, '0')}`,
+  };
+}
+
+  return {
+    periodStart: startDate,
+    periodEnd: endDate,
+  };
+} 
+
 
 /* ======================================================
    WEB COMPONENTS
@@ -1197,20 +1244,40 @@ const [distributionEndDate, setDistributionEndDate] = useState('');
      FILTERS
      ====================================================== */
 
-  const getEffectiveFilters = () => ({
+  const getEffectiveFilters = () => {
+  const filters = {
     dateRange,
-    startDate:
-      dateRange === 'Custom'
-        ? startDate
-        : '',
-    endDate:
-      dateRange === 'Custom'
-        ? endDate
-        : '',
+    startDate: dateRange === 'Custom' ? startDate : '',
+    endDate: dateRange === 'Custom' ? endDate : '',
     purok,
-  });
+  };
 
-  const buildQuery = () => {
+  if (type === 'distribution') {
+    const period = getDistributionPeriodRange(
+      distributionPeriodType,
+      distributionMonth,
+      distributionStartDate,
+      distributionEndDate
+    );
+
+    return {
+      ...filters,
+      assistanceProgram,
+      releaseStatus,
+      distributionPeriodType,
+      distributionMonth:
+        distributionPeriodType === 'Monthly Distribution'
+          ? distributionMonth
+          : '',
+      periodStart: period.periodStart,
+      periodEnd: period.periodEnd,
+    };
+  }
+
+  return filters;
+};
+
+ const buildQuery = () => {
   const params = new URLSearchParams();
 
   params.set('dateRange', dateRange);
@@ -1221,38 +1288,78 @@ const [distributionEndDate, setDistributionEndDate] = useState('');
     params.set('endDate', endDate);
   }
 
-  if (type === 'distribution' && assistanceProgram) {
+  if (type === 'distribution') {
     params.set('programId', assistanceProgram);
+    params.set('releaseStatus', releaseStatus);
+
+    const period = getDistributionPeriodRange(
+      distributionPeriodType,
+      distributionMonth,
+      distributionStartDate,
+      distributionEndDate
+    );
+
+    params.set('periodStart', period.periodStart);
+    params.set('periodEnd', period.periodEnd);
   }
 
   return params.toString();
 };
 
+
   const validateFilters = () => {
-  if (type === 'distribution' && !assistanceProgram) {
-    toast.error('Please select an assistance program first.');
-    return false;
+  // Assistance distribution filters.
+  if (type === 'distribution') {
+    if (!assistanceProgram) {
+      toast.error('Please select an assistance program first.');
+      return false;
+    }
+
+    if (!['All', 'Released', 'Not Released'].includes(releaseStatus)) {
+      toast.error('Please select a valid release status.');
+      return false;
+    }
+
+    if (distributionPeriodType === 'Monthly Distribution') {
+      if (!distributionMonth) {
+        toast.error('Please select a distribution month.');
+        return false;
+      }
+    } else if (distributionPeriodType === 'Custom Date Range') {
+      if (!distributionStartDate || !distributionEndDate) {
+        toast.error('Please select both distribution start and end dates.');
+        return false;
+      }
+
+      if (distributionStartDate > distributionEndDate) {
+        toast.error(
+          'The distribution end date cannot be before the start date.'
+        );
+        return false;
+      }
+    } else {
+      toast.error('Please select a valid distribution period type.');
+      return false;
+    }
   }
 
-  if (dateRange !== 'Custom') {
-    return true;
-  }
+  // Existing report date filter validation.
+  if (dateRange === 'Custom') {
+    if (!startDate || !endDate) {
+      toast.error(
+        'Please select both start and end dates for the custom date range.'
+      );
+      return false;
+    }
 
-  if (!startDate || !endDate) {
-    toast.error(
-      'Please select both start and end dates for the custom date range.'
-    );
-    return false;
-  }
-
-  if (startDate > endDate) {
-    toast.error('Start date cannot be later than end date.');
-    return false;
+    if (startDate > endDate) {
+      toast.error('Start date cannot be later than end date.');
+      return false;
+    }
   }
 
   return true;
 };
-
   /* ======================================================
      REPORT HISTORY
      ====================================================== */
@@ -1310,41 +1417,17 @@ const loadRecords = async () => {
 
     console.log('REPORT TYPE:', type);
     console.log('REPORT FILTERS:', getEffectiveFilters());
+    console.log('REPORT QUERY:', queryString);
 
+    // ANALYTICAL SUMMARY
     if (isAnalytics) {
-      // Keep the existing ML analytics endpoint.
-      // Unwrap common response formats safely.
       const response = await mlApi.getAnalytics(
         `?${queryString}`
       );
 
       let result = response;
-if (type === 'distribution') {
-  if (
-    distributionPeriodType === 'Monthly Distribution' &&
-    !distributionMonth
-  ) {
-    toast.error('Please select a distribution month.');
-    return;
-  }
 
-  if (
-    distributionPeriodType === 'Custom Date Range' &&
-    (!distributionStartDate || !distributionEndDate)
-  ) {
-    toast.error('Please select the distribution start and end dates.');
-    return;
-  }
-
-  if (
-    distributionPeriodType === 'Custom Date Range' &&
-    distributionEndDate < distributionStartDate
-  ) {
-    toast.error('The distribution end date cannot be before the start date.');
-    return;
-  }
-}
-      // Support Axios responses and wrapped API responses.
+      // Unwrap common API response formats.
       for (let i = 0; i < 3; i++) {
         if (
           result &&
@@ -1390,6 +1473,7 @@ if (type === 'distribution') {
       return;
     }
 
+    // NORMAL REPORTS
     setAnalyticsData(null);
 
     const response = await api.get(
@@ -1439,6 +1523,8 @@ if (type === 'distribution') {
 
 const loadAssistancePrograms = async () => {
   try {
+    setLoadingPrograms(true);
+
     const response = await api.get(
       '/reports/assistance-programs'
     );
@@ -1457,6 +1543,11 @@ const loadAssistancePrograms = async () => {
       'Failed to load assistance programs:',
       error
     );
+
+    setAssistancePrograms([]);
+    toast.error('Failed to load assistance programs.');
+  } finally {
+    setLoadingPrograms(false);
   }
 };
 
@@ -1957,6 +2048,41 @@ useEffect(() => {
           );
         }
 
+        // DISTRIBUTION REPORT FILTER DETAILS
+if (reportType === 'distribution') {
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...GRAY);
+
+  const selectedProgram = assistancePrograms.find(
+    (program) =>
+      String(program.program_id ?? program.id) ===
+      String(filters.assistanceProgram)
+  );
+
+  const programName =
+    selectedProgram?.program_name ||
+    selectedProgram?.name ||
+    selectedProgram?.title ||
+    'Selected Program';
+
+  const distributionDetails = [
+    `Assistance Program: ${programName}`,
+    `Release Status: ${filters.releaseStatus || 'All'}`,
+    `Distribution Period: ${
+      filters.periodStart || '—'
+    } to ${
+      filters.periodEnd || '—'
+    }`,
+  ];
+
+  distributionDetails.forEach((detail, index) => {
+    doc.text(detail, margin, currentY + index * 5);
+  });
+
+  currentY += 20;
+}
+
         /* ==================================================
            ANALYTICS PDF
            ================================================== */
@@ -2441,9 +2567,12 @@ const charts = [
          * Then use the browser's download
          * mechanism.
          */
-        const pdfBlob = new Blob([doc.output('arraybuffer')], {
-  type: 'application/octet-stream', // stops browsers/extensions from hijacking the PDF
-});
+        const pdfBlob = new Blob(
+  [doc.output('arraybuffer')],
+  {
+    type: 'application/pdf',
+  }
+);
 
 try {
   triggerDownload(pdfBlob, filename);
@@ -3678,6 +3807,8 @@ try {
                             )
                           : '—'}
                       </p>
+
+                      
                     </div>
 
                     <div>
@@ -3693,6 +3824,39 @@ try {
                           : '—'}
                       </p>
                     </div>
+
+                    {viewingReport.report_type === 'distribution' && (
+  <>
+    <div>
+      <p className="text-xl font-bold text-gray-500">
+        RELEASE STATUS
+      </p>
+      <p className="text-lg font-semibold">
+        {viewingFilters.releaseStatus || 'All'}
+      </p>
+    </div>
+
+    <div>
+      <p className="text-xl font-bold text-gray-500">
+        DISTRIBUTION PERIOD TYPE
+      </p>
+      <p className="text-lg font-semibold">
+        {viewingFilters.distributionPeriodType || '—'}
+      </p>
+    </div>
+
+    <div>
+      <p className="text-xl font-bold text-gray-500">
+        DISTRIBUTION PERIOD
+      </p>
+      <p className="text-lg font-semibold">
+        {viewingFilters.periodStart && viewingFilters.periodEnd
+          ? `${formatDate(viewingFilters.periodStart)} to ${formatDate(viewingFilters.periodEnd)}`
+          : '—'}
+      </p>
+    </div>
+  </>
+)}
                   </div>
                 </div>
               )}
