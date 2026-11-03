@@ -112,17 +112,27 @@ const params = new URLSearchParams({
         </p>
 
         <img
-          key={chartUrl}
-          src={chartUrl}
-          alt={chart.title}
-          className="mt-4 min-h-58 w-full object-contain"
-          loading="lazy"
-          onError={(event) => {
-            console.error("Chart failed to load:", chartUrl);
-            console.error("Check that the Python endpoint exists and returns an image.");
-            event.currentTarget.style.display = "none";
-          }}
-        />
+  key={chartUrl}
+  src={chartUrl}
+  alt={chart.title}
+  className="mt-4 min-h-58 w-full object-contain"
+  loading="lazy"
+  onLoad={(event) => {
+    console.log(
+      `${chart.title} loaded successfully`,
+      event.currentTarget.naturalWidth,
+      event.currentTarget.naturalHeight
+    );
+  }}
+  onError={(event) => {
+    console.error(
+      `Failed to load ${chart.title}:`,
+      chartUrl
+    );
+
+    event.currentTarget.style.display = "none";
+  }}
+/>
 
       
       </article>

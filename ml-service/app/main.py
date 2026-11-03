@@ -16,7 +16,7 @@ import pandas as pd
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from joblib import load
 from pydantic import BaseModel, Field
 
@@ -644,19 +644,48 @@ def get_chart_households():
 
 def generate_chart_response(chart_function, records):
     """
-    Convert the chart function's BytesIO result
-    into an SVG HTTP response.
+    Generate a chart and return the correct image format.
+    Supports PNG and SVG.
     """
 
     image_buffer = chart_function(records)
 
-    image_buffer.seek(0)
+    if image_buffer is None:
+        raise RuntimeError(
+            "Chart function returned no image."
+        )
 
-    return StreamingResponse(
-        image_buffer,
-        media_type="image/svg+xml",
+    if hasattr(image_buffer, "seek"):
+        image_buffer.seek(0)
+
+    image_bytes = image_buffer.getvalue()
+
+    if not image_bytes:
+        raise RuntimeError(
+            "Generated chart image is empty."
+        )
+
+    # Detect actual image format
+    if image_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+        media_type = "image/png"
+
+    elif image_bytes.lstrip().startswith(b"<svg") or (
+        image_bytes.lstrip().startswith(b"<?xml")
+        and b"<svg" in image_bytes[:1000]
+    ):
+        media_type = "image/svg+xml"
+
+    else:
+        raise RuntimeError(
+            "Unsupported chart image format. "
+            f"First bytes: {image_bytes[:50]!r}"
+        )
+
+    return Response(
+        content=image_bytes,
+        media_type=media_type,
         headers={
-            "Cache-Control": "no-cache"
+            "Cache-Control": "no-cache, no-store, must-revalidate"
         }
     )
 
