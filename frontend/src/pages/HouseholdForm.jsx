@@ -257,6 +257,8 @@ const removeIncomeProofFile = (index) => {
       setForm({ ...EMPTY });
       setMembers([]);
       setIncomeProofs([]);
+      setIncomeProofFiles([]);
+      setPreviewImage(null);
       setSavedHouseholdId(null);
 
       setOccupationDetails({
@@ -694,19 +696,19 @@ const uploadHouseholdIncomeProofs = async (householdId) => {
 
   const formData = new FormData();
 
+  // Must be "files" because the backend uses upload.array('files', 5).
   incomeProofFiles.forEach((file) => {
-    formData.append('images', file);
+    formData.append('files', file);
   });
 
   setIncomeProofUploading(true);
 
   try {
-    await api.post(
+    await api.postForm(
       `/households/${encodeURIComponent(householdId)}/income-proofs`,
       formData
     );
 
-    // Reload images after successful upload.
     const response = await api.get(
       `/households/${encodeURIComponent(householdId)}/income-proofs`
     );
@@ -718,6 +720,9 @@ const uploadHouseholdIncomeProofs = async (householdId) => {
     setIncomeProofFiles([]);
 
     toast.success('Income-proof images uploaded successfully.');
+  } catch (error) {
+    console.error('Income-proof upload failed:', error);
+    throw error;
   } finally {
     setIncomeProofUploading(false);
   }
