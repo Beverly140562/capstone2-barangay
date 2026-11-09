@@ -23,8 +23,12 @@ const OCCUPATIONS_WITH_DETAILS = [
 
 const MAX_INCOME_PROOF_FILES = 5;
 const MAX_INCOME_PROOF_SIZE = 5 * 1024 * 1024;
-const ALLOWED_INCOME_PROOF_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
+const ALLOWED_INCOME_PROOF_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+];
 
 // ============================================================
 // DEFAULT HOUSEHOLD FORM
@@ -162,9 +166,11 @@ export default function HouseholdForm() {
   const [member, setMember] = useState({ ...EMPTY_MEMBER });
 
   // Household-level income evidence (not per member).
-  const [incomeProofFiles, setIncomeProofFiles] = useState([]);
   const [incomeProofs, setIncomeProofs] = useState([]);
-  const [incomeProofLoading, setIncomeProofLoading] = useState(false);
+const [incomeProofFiles, setIncomeProofFiles] = useState([]);
+const [incomeProofLoading, setIncomeProofLoading] = useState(false);
+const [incomeProofUploading, setIncomeProofUploading] = useState(false);
+const [previewImage, setPreviewImage] = useState(null);
   // Retain the newly created ID if a later proof upload fails, preventing duplicate households on retry.
   const [savedHouseholdId, setSavedHouseholdId] = useState(null);
 
@@ -200,6 +206,48 @@ export default function HouseholdForm() {
     'w-full rounded-md border border-gray-300 px-3 py-2 text-lg text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-brand';
 
 
+    const handleIncomeProofSelection = (event) => {
+  const selectedFiles = Array.from(event.target.files || []);
+
+  if (!selectedFiles.length) return;
+
+  const validFiles = [];
+
+  for (const file of selectedFiles) {
+    if (!ALLOWED_INCOME_PROOF_TYPES.includes(file.type)) {
+      toast.error(`${file.name}: Only JPG, PNG, and WEBP images are allowed.`);
+      continue;
+    }
+
+    if (file.size > MAX_INCOME_PROOF_SIZE) {
+      toast.error(`${file.name}: Image must not exceed 5 MB.`);
+      continue;
+    }
+
+    validFiles.push(file);
+  }
+
+  setIncomeProofFiles((previous) => {
+    const combined = [...previous, ...validFiles];
+
+    if (combined.length > MAX_INCOME_PROOF_FILES) {
+      toast.error('You can upload a maximum of 5 images.');
+      return combined.slice(0, MAX_INCOME_PROOF_FILES);
+    }
+
+    return combined;
+  });
+
+  // Allow selecting the same file again if needed.
+  event.target.value = '';
+};
+
+const removeIncomeProofFile = (index) => {
+  setIncomeProofFiles((previous) =>
+    previous.filter((_, fileIndex) => fileIndex !== index)
+  );
+};
+
   // ============================================================
   // LOAD HOUSEHOLD FOR EDITING
   // ============================================================
@@ -208,7 +256,6 @@ export default function HouseholdForm() {
     if (!editId) {
       setForm({ ...EMPTY });
       setMembers([]);
-      setIncomeProofFiles([]);
       setIncomeProofs([]);
       setSavedHouseholdId(null);
 
@@ -220,6 +267,8 @@ export default function HouseholdForm() {
 
       return;
     }
+
+
 
     const loadHousehold = async () => {
       try {
@@ -360,20 +409,34 @@ export default function HouseholdForm() {
 
 
         setMembers(loadedMembers);
-        setIncomeProofFiles([]);
 
-        // Load household-level income proof metadata and temporary signed URLs.
-        setIncomeProofLoading(true);
-        try {
-          const proofResponse = await api.get(`/households/${editId}/income-proofs`);
-          setIncomeProofs(Array.isArray(proofResponse?.proofs) ? proofResponse.proofs : []);
-        } catch (proofError) {
-          console.error('Could not load household income proofs:', proofError);
-          setIncomeProofs([]);
-             toast.error('Household loaded, but income proof documents could not be loaded.');
-        } finally {
-          setIncomeProofLoading(false);
-        }
+        // Load household-level income-proof images.
+setIncomeProofLoading(true);
+
+try {
+  const proofResponse = await api.get(
+    `/households/${encodeURIComponent(editId)}/income-proofs`
+  );
+
+  setIncomeProofs(
+    Array.isArray(proofResponse?.images)
+      ? proofResponse.images
+      : []
+  );
+} catch (proofError) {
+  console.error(
+    'Could not load household income proofs:',
+    proofError
+  );
+
+  setIncomeProofs([]);
+
+  toast.error(
+    'Household loaded, but income-proof images could not be loaded.'
+  );
+} finally {
+  setIncomeProofLoading(false);
+}
 
       } catch (err) {
         toast.error(
@@ -386,47 +449,6 @@ export default function HouseholdForm() {
 
     loadHousehold();
   }, [editId]);
-
-
-  // ============================================================
-  // HOUSEHOLD INCOME PROOF FILES
-  // ============================================================
-
-  const handleIncomeProofSelection = (event) => {
-    const selected = Array.from(event.target.files || []);
-    event.target.value = '';
-    if (!selected.length) return;
-
-    const combined = [...incomeProofFiles, ...selected];
-    if (combined.length > MAX_INCOME_PROOF_FILES) {
-      toast.error(`You can upload up to ${MAX_INCOME_PROOF_FILES} images for household income.`);
-      return;
-    }
-    const invalid = selected.find((file) => !ALLOWED_INCOME_PROOF_TYPES.includes(file.type));
-    if (invalid) {
-      toast.error('Only JPG, PNG, and WEBP images are allowed.');
-      return;
-    }
-    const tooLarge = selected.find((file) => file.size > MAX_INCOME_PROOF_SIZE);
-    if (tooLarge) {
-      toast.error('Each image must be 5 MB or smaller.');
-      return;
-    }
-    setIncomeProofFiles(combined);
-  };
-
-  const removeIncomeProofFile = (index) => {
-    setIncomeProofFiles((previous) => previous.filter((_, i) => i !== index));
-  };
-
-  const uploadHouseholdIncomeProofs = async (householdId) => {
-    if (!incomeProofFiles.length) return;
-    const body = new FormData();
-    incomeProofFiles.forEach((file) => body.append('files', file));
-    const response = await api.post(`/households/${householdId}/income-proofs`, body);
-    setIncomeProofs((previous) => [...(response?.proofs || []), ...previous]);
-    setIncomeProofFiles([]);
-  };
 
   // ============================================================
   // HOUSEHOLD INPUT HANDLER
@@ -667,7 +689,39 @@ const deleteMember = async (item) => {
   }
 };
 
+const uploadHouseholdIncomeProofs = async (householdId) => {
+  if (!incomeProofFiles.length) return;
 
+  const formData = new FormData();
+
+  incomeProofFiles.forEach((file) => {
+    formData.append('images', file);
+  });
+
+  setIncomeProofUploading(true);
+
+  try {
+    await api.post(
+      `/households/${encodeURIComponent(householdId)}/income-proofs`,
+      formData
+    );
+
+    // Reload images after successful upload.
+    const response = await api.get(
+      `/households/${encodeURIComponent(householdId)}/income-proofs`
+    );
+
+    setIncomeProofs(
+      Array.isArray(response?.images) ? response.images : []
+    );
+
+    setIncomeProofFiles([]);
+
+    toast.success('Income-proof images uploaded successfully.');
+  } finally {
+    setIncomeProofUploading(false);
+  }
+};
 
   // ============================================================
   // SAVE HOUSEHOLD
@@ -887,13 +941,11 @@ if (duplicateCheck?.duplicate) {
         );
       }
 
+      // Upload selected household income-proof images.
+if (incomeProofFiles.length > 0) {
+  await uploadHouseholdIncomeProofs(householdId);
+}
 
-      // --------------------------------------------------------
-      // UPLOAD HOUSEHOLD-LEVEL INCOME PROOFS
-      // --------------------------------------------------------
-      if (incomeProofFiles.length > 0) {
-        await uploadHouseholdIncomeProofs(householdId);
-      }
 
       // --------------------------------------------------------
       // SAVE TEMPORARY MEMBERS
@@ -1624,56 +1676,142 @@ if (duplicateCheck?.duplicate) {
               />
             </Row>
 
-            <div className="md:col-span-2 rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <div className="flex flex-col gap-2">
-                <div>
-                  <h4 className="font-semibold text-xl text-gray-800">Household Income Proof</h4>
-                  <p className="text-lg text-gray-600">Attach one or more supporting images for the household's monthly income. JPG, PNG, or WEBP; maximum 5 images.</p>
-                </div>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  multiple
-                  onChange={handleIncomeProofSelection}
-                  className="block w-full text-xl text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-gray-200 file:px-4 file:py-2 file:font-semibold"
-                  disabled={busy}
-                />
-                {incomeProofFiles.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium text-gray-700">Selected images (uploaded when you save the household):</p>
-                    {incomeProofFiles.map((file, index) => (
-                      <div key={`${file.name}-${file.lastModified}-${index}`} className="flex items-center justify-between gap-3 rounded bg-white px-3 py-2 text-sm">
-                        <span className="min-w-0 truncate">{file.name} · {(file.size / 1024 / 1024).toFixed(2)} MB</span>
-                        <button type="button" className="text-red-600 hover:underline" onClick={() => removeIncomeProofFile(index)}>Remove</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="border-t border-gray-200 pt-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-lg font-semibold text-gray-700">Uploaded household income proof</p>
-                    <span className="text-lg font-medium text-gray-600">
-                      {incomeProofs.length} image{incomeProofs.length === 1 ? '' : 's'} uploaded
-                    </span>
-                  </div>
-                  {incomeProofLoading ? (
-                    <p className="mt-2 text-sm text-gray-500">Loading proof documents…</p>
-                  ) : incomeProofs.length ? (
-                    <ul className="mt-2 space-y-2">
-                      {incomeProofs.map((proof) => (
-                        <li key={proof.proof_id} className="flex flex-wrap items-center justify-between gap-2 rounded bg-white px-3 py-2 text-sm">
-                          <span className="min-w-0 truncate">{proof.original_file_name}</span>
-                          {proof.signed_url && <a className="font-semibold text-brand underline" href={proof.signed_url} target="_blank" rel="noreferrer">View image</a>}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="mt-2 text-lg text-gray-500">No household income proof has been uploaded.</p>
-                  )}
-                  <p className="mt-2 text-lg text-gray-500">Uploaded documents are private and stored with this household record.</p>
-                </div>
-              </div>
+            
+<div className="md:col-span-2 rounded-lg border border-gray-200 bg-gray-50 p-4">
+
+  <div className="flex items-center justify-between gap-3 mb-3">
+    <div>
+      <h4 className="font-semibold text-xl text-gray-800">
+        Household Income Proof
+      </h4>
+
+      <p className="text-sm text-gray-500">
+        Upload supporting documents showing household income.
+      </p>
+    </div>
+
+    <span className="text-sm font-medium text-gray-600">
+      {incomeProofs.length + incomeProofFiles.length} image(s)
+    </span>
+  </div>
+
+  {/* UPLOAD INPUT */}
+  <div className="mb-4">
+    <label className="block text-sm font-semibold text-gray-700 mb-2">
+      Select Income-Proof Images
+    </label>
+
+    <input
+      type="file"
+      accept="image/jpeg,image/png,image/webp"
+      multiple
+      onChange={handleIncomeProofSelection}
+      disabled={incomeProofUploading || incomeProofLoading}
+      className="block w-full text-sm text-gray-700
+        file:mr-4 file:py-2 file:px-4
+        file:rounded-md file:border-0
+        file:bg-[#6E2430] file:text-white
+        hover:file:bg-[#57202A]
+        cursor-pointer"
+    />
+
+    <p className="text-xs text-gray-500 mt-1">
+      JPG, PNG, or WEBP. Maximum 5 images, 5 MB each.
+    </p>
+  </div>
+
+  {/* EXISTING UPLOADED IMAGES */}
+  {incomeProofLoading ? (
+    <p className="text-sm text-gray-500 py-3">
+      Loading uploaded images...
+    </p>
+  ) : incomeProofs.length > 0 ? (
+    <>
+      <h5 className="font-semibold text-sm text-gray-700 mb-2">
+        Previously Uploaded Images
+      </h5>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+        {incomeProofs.map((image) => (
+          <div
+            key={image.path}
+            className="rounded-lg border border-gray-200 bg-white overflow-hidden"
+          >
+            <button
+              type="button"
+              onClick={() => setPreviewImage(image)}
+              className="block w-full cursor-zoom-in"
+            >
+              <img
+                src={image.url}
+                alt={image.name || 'Household income proof'}
+                className="w-full h-36 object-cover hover:opacity-90 transition"
+              />
+            </button>
+
+            <div className="p-2">
+              <p className="text-sm text-gray-600 truncate">
+                {image.name || 'Income proof'}
+              </p>
+              <p className="text-xs text-gray-400">
+                Click to enlarge
+              </p>
             </div>
+          </div>
+        ))}
+      </div>
+    </>
+  ) : (
+    <p className="text-sm text-gray-500 mb-3">
+      No previously uploaded income-proof images.
+    </p>
+  )}
+
+  {/* NEWLY SELECTED IMAGES */}
+  {incomeProofFiles.length > 0 && (
+    <>
+      <h5 className="font-semibold text-sm text-gray-700 mb-2">
+        New Images to Upload
+      </h5>
+
+      <div className="space-y-2">
+        {incomeProofFiles.map((file, index) => (
+          <div
+            key={`${file.name}-${index}`}
+            className="flex items-center justify-between gap-3 rounded-md border bg-white p-3"
+          >
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-700 truncate">
+                {file.name}
+              </p>
+
+              <p className="text-xs text-gray-400">
+                {(file.size / 1024 / 1024).toFixed(2)} MB
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => removeIncomeProofFile(index)}
+              className="text-red-600 hover:text-red-800 text-sm font-semibold"
+              disabled={incomeProofUploading}
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+    </>
+  )}
+
+  {incomeProofUploading && (
+    <p className="text-sm text-blue-600 mt-3">
+      Uploading income-proof images...
+    </p>
+  )}
+
+</div>
+
 
           </div>
 

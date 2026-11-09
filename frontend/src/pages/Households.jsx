@@ -417,14 +417,7 @@ function HouseholdDrawer({ data, onClose, reload }) {
   const [loadingProofs, setLoadingProofs] = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
 
-  const MAX_FILES = 5;
-  const MAX_FILE_SIZE = 5 * 1024 * 1024;
-
-  const allowedImageTypes = [
-    'image/jpeg',
-    'image/png',
-    'image/webp',
-  ];
+  
 
   const household =
   data?.household ??
@@ -480,119 +473,6 @@ if (!household) {
   return null;
 }
 
-  const handleProofSelection = (event) => {
-  const files = Array.from(event.target.files || []);
-
-  if (!files.length) {
-    setSelectedFiles([]);
-    return;
-  }
-
-  if (files.length > MAX_FILES) {
-    toast.error('You can select a maximum of 5 images at a time.');
-    event.target.value = '';
-    return;
-  }
-
-  const invalidType = files.find(
-    (file) => !allowedImageTypes.includes(file.type)
-  );
-
-  if (invalidType) {
-    toast.error('Only JPG, PNG, and WEBP images are allowed.');
-    event.target.value = '';
-    return;
-  }
-
-  const oversized = files.find(
-    (file) => file.size > MAX_FILE_SIZE
-  );
-
-  if (oversized) {
-    toast.error('Each image must be 5 MB or smaller.');
-    event.target.value = '';
-    return;
-  }
-
-  setSelectedFiles(files);
-};
-
-  const uploadIncomeProofs = async () => {
-  if (!selectedFiles.length) {
-    toast.error('Please select at least one image.');
-    return;
-  }
-
-  if (!canEdit) {
-    toast.error('You do not have permission to upload images.');
-    return;
-  }
-
-  setUploadingProofs(true);
-
-  try {
-    const formData = new FormData();
-
-    selectedFiles.forEach((file) => {
-      formData.append('files', file);
-    });
-
-    await api.postForm(
-      `/households/${encodeURIComponent(
-        household.household_id
-      )}/income-proofs`,
-      formData
-    );
-
-    setSelectedFiles([]);
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-
-    toast.success('Income-proof images uploaded successfully.');
-
-    await loadIncomeProofs();
-  } catch (err) {
-    console.error('Income-proof upload failed:', err);
-
-    toast.error(
-      err?.message || 'Failed to upload income-proof images.'
-    );
-  } finally {
-    setUploadingProofs(false);
-  }
-};
-  
-
-  const removeIncomeProof = async (image) => {
-  if (!canEdit || !image?.path) return;
-
-  const confirmed = window.confirm(
-    'Are you sure you want to remove this income-proof image?'
-  );
-
-  if (!confirmed) return;
-
-  try {
-    await api.del(
-      `/households/${encodeURIComponent(
-        household.household_id
-      )}/income-proofs`,
-      { path: image.path }
-    );
-
-    toast.success('Income-proof image removed successfully.');
-
-    await loadIncomeProofs();
-  } catch (err) {
-    console.error('Failed to remove income proof:', err);
-
-    toast.error(
-      err?.message || 'Failed to remove income-proof image.'
-    );
-  }
-};
 
   const validate = async () => {
   try {
