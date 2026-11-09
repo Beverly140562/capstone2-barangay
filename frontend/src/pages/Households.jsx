@@ -201,40 +201,7 @@ const open = async (id) => {
       );
     }
 
-    // Show the existing household details immediately.
     setSelected(householdData);
-
-    // Refresh the prediction and save it through the existing API route.
-    try {
-      const predictionResult = await api.post(
-        `/households/${encodeURIComponent(id)}/predict`,
-        {}
-      );
-
-      if (predictionResult?.household) {
-        setSelected((current) => {
-          if (!current) return current;
-
-          return {
-            ...current,
-            household: {
-              ...current.household,
-              ...predictionResult.household,
-            },
-          };
-        });
-      }
-    } catch (predictionError) {
-      console.error(
-        'Household details loaded, but prediction refresh failed:',
-        predictionError
-      );
-
-      setError(
-        predictionError?.message ||
-        'Household details loaded, but the ML prediction could not be refreshed.'
-      );
-    }
   } catch (err) {
     console.error('Failed to open household:', err);
     setError(err?.message || 'Failed to open household details.');
@@ -447,12 +414,8 @@ const programNames = programs
 function HouseholdDrawer({ data, onClose, reload }) {
   const { user } = useAuth();
   const [incomeProofs, setIncomeProofs] = useState([]);
-  const [selectedFiles, setSelectedFiles] = useState([]);
-  const [uploadingProofs, setUploadingProofs] = useState(false);
   const [loadingProofs, setLoadingProofs] = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
-
-  const fileInputRef = useRef(null);
 
   const MAX_FILES = 5;
   const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -508,6 +471,10 @@ const totalFamilySize = members.length + 1;
     setLoadingProofs(false);
   }
 }, [household?.household_id]);
+
+useEffect(() => {
+  loadIncomeProofs();
+}, [loadIncomeProofs]);
 
 if (!household) {
   return null;
@@ -801,15 +768,16 @@ if (!household) {
 </div>
         </section>
 
-        {/* Income Proof Images */}
+        {/* Household Income Proof - View Only */}
 <section className="mt-6">
   <div className="flex items-center justify-between gap-3 mb-3">
     <div>
       <h3 className="font-bold text-lg">
         Household Income Proof
       </h3>
-      <p className="text-sm text-gray-700">
-        Supporting income documents and images
+
+      <p className="text-sm text-gray-500">
+        Uploaded supporting income documents and images
       </p>
     </div>
 
@@ -818,98 +786,50 @@ if (!household) {
     </Badge>
   </div>
 
-  {canEdit && (
-    <div className="border border-dashed border-gray-300 rounded-lg p-4">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        multiple
-        onChange={handleProofSelection}
-        className="block w-full text-lg"
-      />
-
-      <p className="text-sm text-gray-500 mt-2">
-        JPG, PNG, or WEBP. Maximum 5 images per upload.
-      </p>
-
-      {selectedFiles.length > 0 && (
-        <div className="mt-3 space-y-2">
-          <p className="font-medium text-lg">
-            Selected images ({selectedFiles.length})
-          </p>
-
-          {selectedFiles.map((file, index) => (
-            <div
-              key={`${file.name}-${index}`}
-              className="text-sm text-gray-600 flex justify-between"
-            >
-              <span className="truncate">{file.name}</span>
-              <span>
-                {(file.size / 1024 / 1024).toFixed(2)} MB
-              </span>
-            </div>
-          ))}
-
-          <Button
-            onClick={uploadIncomeProofs}
-            disabled={uploadingProofs}
-          >
-            {uploadingProofs
-              ? 'Uploading...'
-              : 'Upload Images'}
-          </Button>
-        </div>
-      )}
-    </div>
-  )}
-
-
   {loadingProofs ? (
-    <p className="text-sm text-gray-500 mt-4">
-      Loading income-proof images...
-    </p>
+    <div className="flex items-center justify-center py-6">
+      <p className="text-sm text-gray-500">
+        Loading income-proof images...
+      </p>
+    </div>
   ) : incomeProofs.length > 0 ? (
-    <div className="grid grid-cols-2 gap-3 mt-4">
+    <div className="grid grid-cols-2 gap-3">
       {incomeProofs.map((image) => (
         <div
           key={image.path}
-          className="border rounded-lg overflow-hidden"
+          className="border border-gray-200 rounded-lg overflow-hidden bg-white"
         >
           <button
             type="button"
             onClick={() => setPreviewImage(image)}
-            className="block w-full"
+            className="block w-full cursor-zoom-in"
+            title="Click to view full image"
           >
             <img
               src={image.url}
-              alt="Household income proof"
-              className="w-full h-36 object-cover"
+              alt={image.name || 'Household income proof'}
+              className="w-full h-40 object-cover hover:opacity-90 transition"
             />
           </button>
 
-          <div className="p-2 flex justify-between items-center gap-2">
-            <span className="text-sm text-gray-500 truncate">
+          <div className="p-2">
+            <p className="text-sm text-gray-600 truncate">
               {image.name || 'Income proof'}
-            </span>
+            </p>
 
-            {canEdit && (
-              <button
-                type="button"
-                onClick={() => removeIncomeProof(image)}
-                className="text-red-600 text-sm hover:underline"
-              >
-                Remove
-              </button>
-            )}
+            <p className="text-xs text-gray-400 mt-1">
+              Click image to enlarge
+            </p>
           </div>
         </div>
       ))}
     </div>
   ) : (
-    <p className="text-sm text-gray-400 mt-4">
-      No income-proof images uploaded.
-    </p>
+    <div className="border border-dashed border-gray-300 rounded-lg p-6 text-center">
+      <p className="text-gray-400 text-sm">
+        No income-proof images uploaded.
+      </p>
+    </div>
   )}
 </section>
 
@@ -920,13 +840,13 @@ if (!household) {
     onClick={() => setPreviewImage(null)}
   >
     <div
-      className="relative max-w-4xl max-h-[90vh]"
+      className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center"
       onClick={(event) => event.stopPropagation()}
     >
       <button
         type="button"
         onClick={() => setPreviewImage(null)}
-        className="absolute -top-10 right-0 text-white text-2xl"
+        className="absolute -top-10 right-0 text-white text-2xl hover:text-gray-300"
         aria-label="Close image preview"
       >
         ✕
@@ -934,9 +854,13 @@ if (!household) {
 
       <img
         src={previewImage.url}
-        alt="Income proof preview"
+        alt={previewImage.name || 'Income proof preview'}
         className="max-w-full max-h-[85vh] object-contain rounded-lg"
       />
+
+      <p className="text-white text-sm mt-3">
+        {previewImage.name || 'Household Income Proof'}
+      </p>
     </div>
   </div>
 )}

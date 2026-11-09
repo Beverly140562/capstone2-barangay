@@ -61,8 +61,7 @@ const HOUSEHOLD_FIELDS = [
   'sharer',
   'caretaker',
   'consent',
-  'migration_type',
-  'migration_destination',
+  
 ];
 
 /*
@@ -345,16 +344,25 @@ async function refreshHouseholdPrediction(householdId) {
 */
 router.use(auth);
 
+
 /*
 |--------------------------------------------------------------------------
-| Household-level income-proof image uploads
+| HOUSEHOLD INCOME-PROOF IMAGE UPLOADS
 |--------------------------------------------------------------------------
-| Staff, admin, and captain may upload/view images without an approval or
-| verification workflow. Images are stored in a private Supabase bucket.
+| Images are stored in:
+|   Supabase Storage: income-proofs
+|
+| Image paths are stored directly in:
+|   households.income_proof_images (TEXT[])
+|
+| No separate metadata table.
+|--------------------------------------------------------------------------
 */
+
 const INCOME_PROOF_BUCKET = 'income-proofs';
 const INCOME_PROOF_MAX_FILES = 5;
 const INCOME_PROOF_MAX_FILE_SIZE = 5 * 1024 * 1024;
+const INCOME_PROOF_SIGNED_URL_EXPIRY = 3600;
 
 const INCOME_PROOF_TYPES = new Map([
   ['image/jpeg', 'jpg'],
@@ -365,7 +373,9 @@ const INCOME_PROOF_TYPES = new Map([
 let incomeProofSupabaseAdmin = null;
 
 function getIncomeProofSupabaseAdmin() {
-  if (incomeProofSupabaseAdmin) return incomeProofSupabaseAdmin;
+  if (incomeProofSupabaseAdmin) {
+    return incomeProofSupabaseAdmin;
+  }
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -376,22 +386,28 @@ function getIncomeProofSupabaseAdmin() {
     );
   }
 
-  incomeProofSupabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  });
+  incomeProofSupabaseAdmin = createClient(
+    supabaseUrl,
+    serviceRoleKey,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    }
+  );
 
   return incomeProofSupabaseAdmin;
 }
 
 const incomeProofUpload = multer({
   storage: multer.memoryStorage(),
+
   limits: {
     files: INCOME_PROOF_MAX_FILES,
     fileSize: INCOME_PROOF_MAX_FILE_SIZE,
   },
+
   fileFilter: (_req, file, callback) => {
     if (!INCOME_PROOF_TYPES.has(file.mimetype)) {
       return callback(
@@ -417,21 +433,33 @@ function handleIncomeProofUpload(req, res, next) {
             ? `You can upload up to ${INCOME_PROOF_MAX_FILES} images at a time.`
             : error.message || 'Unable to process uploaded images.';
 
-      return res.status(400).json({ error: message });
+      return res.status(400).json({
+        error: message,
+      });
     }
   );
 }
 
-async function getIncomeProofSignedUrl(supabaseAdmin, proof) {
+/*
+|--------------------------------------------------------------------------
+| CREATE SIGNED IMAGE URL
+|--------------------------------------------------------------------------
+*/
+
+async function createIncomeProofImage(supabaseAdmin, path) {
   const { data, error } = await supabaseAdmin.storage
     .from(INCOME_PROOF_BUCKET)
-    .createSignedUrl(proof.storage_path, 300);
+    .createSignedUrl(
+      path,
+      INCOME_PROOF_SIGNED_URL_EXPIRY
+    );
 
   if (error) throw error;
 
   return {
-    ...proof,
-    signed_url: data.signedUrl,
+    path,
+    url: data.signedUrl,
+    name: path.split('/').pop(),
   };
 }
 
@@ -440,11 +468,17 @@ async function getIncomeProofSignedUrl(supabaseAdmin, proof) {
 | UPLOAD HOUSEHOLD INCOME-PROOF IMAGES
 |--------------------------------------------------------------------------
 | POST /api/households/:householdId/income-proofs
-| multipart/form-data field: files
+|
+| multipart/form-data:
+|   files
+|
+| Saves paths directly into households.income_proof_images.
+|--------------------------------------------------------------------------
 */
+
 router.post(
   '/:householdId/income-proofs',
-  requireRole('admin', 'captain', 'staff'),
+  requireRole('admin', 'staff'),
   handleIncomeProofUpload,
   async (req, res) => {
     const { householdId } = req.params;
@@ -469,66 +503,78 @@ router.post(
       );
 
       if (!householdRows.length) {
-        return res.status(404).json({ error: 'Household not found.' });
+        return res.status(404).json({
+          error: 'Household not found.',
+        });
       }
 
       const supabaseAdmin = getIncomeProofSupabaseAdmin();
-      const metadataRows = [];
 
+      /*
+       * Upload image files to private Supabase Storage.
+       */
       for (const file of files) {
         const extension = INCOME_PROOF_TYPES.get(file.mimetype);
-        const storagePath = `${householdId}/${randomUUID()}.${extension}`;
 
-        const { error: storageError } = await supabaseAdmin.storage
+        if (!extension) {
+          throw new Error('Unsupported image type.');
+        }
+
+        const path =
+          `${householdId}/${randomUUID()}.${extension}`;
+
+        const { error: uploadError } = await supabaseAdmin.storage
           .from(INCOME_PROOF_BUCKET)
-          .upload(storagePath, file.buffer, {
+          .upload(path, file.buffer, {
             contentType: file.mimetype,
             cacheControl: '3600',
             upsert: false,
           });
 
-        if (storageError) throw storageError;
+        if (uploadError) throw uploadError;
 
-        uploadedPaths.push(storagePath);
-
-        metadataRows.push({
-          household_id: householdId,
-          storage_path: storagePath,
-          original_file_name: String(
-            file.originalname || 'income-proof'
-          ).slice(0, 255),
-          mime_type: file.mimetype,
-          file_size: file.size,
-          uploaded_by:
-            req.user?.user_id ??
-            req.user?.users ??
-            req.user?.id ??
-            req.user?.sub ??
-            null,
-        });
+        uploadedPaths.push(path);
       }
 
-      const { data: insertedRows, error: insertError } = await supabaseAdmin
-        .from('household_income_proofs')
-        .insert(metadataRows)
-        .select(
-          'proof_id, household_id, storage_path, original_file_name, mime_type, file_size, uploaded_at'
-        );
-
-      if (insertError) throw insertError;
-
-      const proofs = await Promise.all(
-        (insertedRows || []).map((proof) =>
-          getIncomeProofSignedUrl(supabaseAdmin, proof)
+      /*
+       * Generate signed URLs before saving the paths.
+       */
+      const images = await Promise.all(
+        uploadedPaths.map((path) =>
+          createIncomeProofImage(supabaseAdmin, path)
         )
       );
 
+      /*
+       * Save paths directly to the households table.
+       * The array concatenation preserves previously uploaded images.
+       */
+      const updatedRows = await query(
+        `
+          UPDATE households
+          SET income_proof_images =
+            COALESCE(income_proof_images, ARRAY[]::TEXT[])
+            || $1::TEXT[]
+          WHERE household_id = $2
+          RETURNING income_proof_images
+        `,
+        [uploadedPaths, householdId]
+      );
+
+      if (!updatedRows.length) {
+        throw new Error('Unable to save image paths to household.');
+      }
+
       return res.status(201).json({
+        success: true,
         message: 'Household income-proof images uploaded successfully.',
-        proofs,
+        images,
       });
+
     } catch (error) {
-      // Remove any uploaded objects if metadata saving fails.
+      /*
+       * Remove uploaded files if saving fails.
+       */
       if (uploadedPaths.length) {
         try {
           const supabaseAdmin = getIncomeProofSupabaseAdmin();
@@ -537,10 +583,6 @@ router.post(
             .from(INCOME_PROOF_BUCKET)
             .remove(uploadedPaths);
 
-          await supabaseAdmin
-            .from('household_income_proofs')
-            .delete()
-            .in('storage_path', uploadedPaths);
         } catch (cleanupError) {
           console.error(
             'Income-proof upload cleanup failed:',
@@ -549,7 +591,10 @@ router.post(
         }
       }
 
-      console.error('Household income-proof upload failed:', error);
+      console.error(
+        'Household income-proof upload failed:',
+        error
+      );
 
       return res.status(500).json({
         error:
@@ -565,7 +610,11 @@ router.post(
 | GET HOUSEHOLD INCOME-PROOF IMAGES
 |--------------------------------------------------------------------------
 | GET /api/households/:householdId/income-proofs
+|
+| Reads image paths directly from households.income_proof_images.
+|--------------------------------------------------------------------------
 */
+
 router.get(
   '/:householdId/income-proofs',
   requireRole('admin', 'captain', 'staff'),
@@ -575,7 +624,10 @@ router.get(
 
       const householdRows = await query(
         `
-          SELECT household_id
+          SELECT
+            household_id,
+            COALESCE(income_proof_images, ARRAY[]::TEXT[])
+              AS income_proof_images
           FROM households
           WHERE household_id = $1
           LIMIT 1
@@ -584,35 +636,189 @@ router.get(
       );
 
       if (!householdRows.length) {
-        return res.status(404).json({ error: 'Household not found.' });
+        return res.status(404).json({
+          error: 'Household not found.',
+        });
+      }
+
+      const paths = householdRows[0].income_proof_images || [];
+
+      if (!paths.length) {
+        return res.json({
+          images: [],
+        });
       }
 
       const supabaseAdmin = getIncomeProofSupabaseAdmin();
 
-      const { data, error } = await supabaseAdmin
-        .from('household_income_proofs')
-        .select(
-          'proof_id, household_id, storage_path, original_file_name, mime_type, file_size, uploaded_at'
-        )
-        .eq('household_id', householdId)
-        .order('uploaded_at', { ascending: false });
+      const results = await Promise.all(
+        paths.map(async (path) => {
+          try {
+            return await createIncomeProofImage(
+              supabaseAdmin,
+              path
+            );
+          } catch (error) {
+            console.error(
+              'Unable to generate income-proof URL:',
+              path,
+              error.message
+            );
 
-      if (error) throw error;
-
-      const proofs = await Promise.all(
-        (data || []).map((proof) =>
-          getIncomeProofSignedUrl(supabaseAdmin, proof)
-        )
+            return null;
+          }
+        })
       );
 
-      return res.json({ proofs });
+      return res.json({
+        images: results.filter(Boolean),
+      });
+
     } catch (error) {
-      console.error('Household income-proof retrieval failed:', error);
+      console.error(
+        'Household income-proof retrieval failed:',
+        error
+      );
 
       return res.status(500).json({
         error:
           error.message ||
           'Failed to retrieve household income-proof images.',
+      });
+    }
+  }
+);
+
+/*
+|--------------------------------------------------------------------------
+| DELETE HOUSEHOLD INCOME-PROOF IMAGE
+|--------------------------------------------------------------------------
+| DELETE /api/households/:householdId/income-proofs
+|
+| Request body:
+|   { "path": "householdId/image-name.jpg" }
+|--------------------------------------------------------------------------
+*/
+
+router.delete(
+  '/:householdId/income-proofs',
+  requireRole('admin', 'staff'),
+  async (req, res) => {
+    const { householdId } = req.params;
+    const { path } = req.body || {};
+
+    try {
+      if (
+        typeof path !== 'string' ||
+        !path.trim() ||
+        !path.startsWith(`${householdId}/`)
+      ) {
+        return res.status(400).json({
+          error: 'Invalid income-proof image path.',
+        });
+      }
+
+      const householdRows = await query(
+        `
+          SELECT
+            household_id,
+            COALESCE(income_proof_images, ARRAY[]::TEXT[])
+              AS income_proof_images
+          FROM households
+          WHERE household_id = $1
+          LIMIT 1
+        `,
+        [householdId]
+      );
+
+      if (!householdRows.length) {
+        return res.status(404).json({
+          error: 'Household not found.',
+        });
+      }
+
+      const existingPaths =
+        householdRows[0].income_proof_images || [];
+
+      if (!existingPaths.includes(path)) {
+        return res.status(404).json({
+          error: 'Income-proof image not found.',
+        });
+      }
+
+      /*
+       * Remove the path from the household record first.
+       */
+      const updatedRows = await query(
+        `
+          UPDATE households
+          SET income_proof_images =
+            array_remove(
+              COALESCE(income_proof_images, ARRAY[]::TEXT[]),
+              $1
+            )
+          WHERE household_id = $2
+          RETURNING income_proof_images
+        `,
+        [path, householdId]
+      );
+
+      if (!updatedRows.length) {
+        return res.status(500).json({
+          error: 'Unable to update household image records.',
+        });
+      }
+
+      /*
+       * Remove the actual image from Supabase Storage.
+       */
+      const supabaseAdmin = getIncomeProofSupabaseAdmin();
+
+      const { error: deleteError } = await supabaseAdmin.storage
+        .from(INCOME_PROOF_BUCKET)
+        .remove([path]);
+
+      if (deleteError) {
+        /*
+         * Restore the path if Storage deletion fails.
+         */
+        await query(
+          `
+            UPDATE households
+            SET income_proof_images =
+              CASE
+                WHEN $1 = ANY(
+                  COALESCE(income_proof_images, ARRAY[]::TEXT[])
+                )
+                THEN income_proof_images
+                ELSE COALESCE(
+                  income_proof_images,
+                  ARRAY[]::TEXT[]
+                ) || ARRAY[$1]::TEXT[]
+              END
+            WHERE household_id = $2
+          `,
+          [path, householdId]
+        );
+
+        throw deleteError;
+      }
+
+      return res.json({
+        success: true,
+        message: 'Income-proof image deleted successfully.',
+      });
+
+    } catch (error) {
+      console.error(
+        'Household income-proof deletion failed:',
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          error.message ||
+          'Failed to delete household income-proof image.',
       });
     }
   }
