@@ -1325,36 +1325,15 @@ router.post(
        * the household.
        */
       try {
-const rawPrediction = await predictHousehold(household);
-
-const prediction = applyIncomeProofGate(
-  rawPrediction,
-  household
-);
-        await query(
-          `
-            UPDATE households
-            SET
-              vulnerability = $1,
-              vulnerability_prob = $2,
-              suggested_programs = $3
-            WHERE household_id = $4
-          `,
-          [
-  prediction.vulnerability ?? null,
-  prediction.vulnerability_prob ?? null,
-  Array.isArray(prediction.suggested_programs)
-    ? prediction.suggested_programs
-    : [],
-  household.household_id,
-]
-        );
-      } catch (mlError) {
-        console.error(
-          'Household created, but ML prediction failed:',
-          mlError
-        );
-      }
+  await refreshHouseholdPrediction(
+    household.household_id
+  );
+} catch (mlError) {
+  console.error(
+    'Household created, but ML prediction failed:',
+    mlError
+  );
+}
 
       const updated = await query(
         `
@@ -1509,38 +1488,20 @@ if (
        * Re-run ML after household information changes.
        * Do not change validation_status automatically.
        */
-      try {
-const rawPrediction = await predictHousehold(household);
-
-const prediction = applyIncomeProofGate(
-  rawPrediction,
-  household
-);
-        await query(
-          `
-            UPDATE households
-SET
-  vulnerability = $1,
-  vulnerability_prob = $2,
-  suggested_programs = $3
-WHERE household_id = $4;
-          `,
-          [
-  prediction.vulnerability ?? null,
-  prediction.vulnerability_prob ?? null,
-  Array.isArray(prediction.suggested_programs)
-    ? prediction.suggested_programs
-    : [],
-  household.household_id,
-]
-        );
-      } catch (mlError) {
-        console.error(
-          'Household updated, but ML prediction failed:',
-          mlError
-        );
-      }
-
+      /*
+ * Refresh ML prediction after household information changes.
+ * Do not automatically change validation status.
+ */
+try {
+  await refreshHouseholdPrediction(
+    req.params.id
+  );
+} catch (mlError) {
+  console.error(
+    'Household updated, but ML prediction failed:',
+    mlError
+  );
+}
       const updated = await query(
         `
           SELECT *

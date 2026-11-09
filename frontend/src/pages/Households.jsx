@@ -523,9 +523,12 @@ if (!household) {
         : '—',
     ],
     [
-      'Disability',
-      household.disability_present || 'Not specified',
-    ],
+  'Disability Present',
+  household.disability_present === true ||
+  household.disability_present === 'true'
+    ? 'Yes'
+    : 'No',
+],
     ['Residence', household.residence],
     [
       'Household Status',
