@@ -1,4 +1,3 @@
-
 const TOKEN_KEY = 'luinab_token';
 
 // Local development uses the Vite proxy.
@@ -25,11 +24,16 @@ async function request(path, options = {}) {
     : `/${path}`;
 
   const token = getToken();
+  const isFormData =
+    typeof FormData !== 'undefined' &&
+    options.body instanceof FormData;
 
   const headers = {
-    ...(options.body !== undefined
-      ? { 'Content-Type': 'application/json' }
-      : {}),
+    ...(
+      options.body !== undefined && !isFormData
+        ? { 'Content-Type': 'application/json' }
+        : {}
+    ),
     ...(options.headers || {}),
   };
 
@@ -38,13 +42,13 @@ async function request(path, options = {}) {
   }
 
   const res = await fetch(
-  `${API_BASE_URL}${normalizedPath}`,
-  {
-    ...options,
-    cache: 'no-store',
-    headers,
-  }
-);
+    `${API_BASE_URL}${normalizedPath}`,
+    {
+      ...options,
+      cache: 'no-store',
+      headers,
+    }
+  );
 
   const contentType =
     res.headers.get('content-type') || '';
@@ -133,6 +137,14 @@ export const api = {
       body: JSON.stringify(body ?? {}),
     }),
 
+  // Use this for FormData uploads.
+  // Do not manually set Content-Type.
+  postForm: (path, formData) =>
+    request(path, {
+      method: 'POST',
+      body: formData,
+    }),
+
   put: (path, body) =>
     request(path, {
       method: 'PUT',
@@ -145,8 +157,11 @@ export const api = {
       body: JSON.stringify(body ?? {}),
     }),
 
-  del: (path) =>
+  del: (path, body) =>
     request(path, {
       method: 'DELETE',
+      ...(body !== undefined
+        ? { body: JSON.stringify(body) }
+        : {}),
     }),
 };

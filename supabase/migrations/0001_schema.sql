@@ -98,10 +98,6 @@ disability_present BOOLEAN DEFAULT FALSE,
             )
         ),
 
-    -- Migration information
-    migration_type VARCHAR(50),
-    migration_destination TEXT,
-
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

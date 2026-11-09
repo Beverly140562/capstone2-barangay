@@ -21,6 +21,10 @@ const OCCUPATIONS_WITH_DETAILS = [
   'Private'
 ];
 
+const MAX_INCOME_PROOF_FILES = 5;
+const MAX_INCOME_PROOF_SIZE = 5 * 1024 * 1024;
+const ALLOWED_INCOME_PROOF_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
 
 // ============================================================
 // DEFAULT HOUSEHOLD FORM
@@ -157,6 +161,13 @@ export default function HouseholdForm() {
   const [members, setMembers] = useState([]);
   const [member, setMember] = useState({ ...EMPTY_MEMBER });
 
+  // Household-level income evidence (not per member).
+  const [incomeProofFiles, setIncomeProofFiles] = useState([]);
+  const [incomeProofs, setIncomeProofs] = useState([]);
+  const [incomeProofLoading, setIncomeProofLoading] = useState(false);
+  // Retain the newly created ID if a later proof upload fails, preventing duplicate households on retry.
+  const [savedHouseholdId, setSavedHouseholdId] = useState(null);
+
   const [busy, setBusy] = useState(false);
   const [memberBusy, setMemberBusy] = useState(false);
 
@@ -197,6 +208,9 @@ export default function HouseholdForm() {
     if (!editId) {
       setForm({ ...EMPTY });
       setMembers([]);
+      setIncomeProofFiles([]);
+      setIncomeProofs([]);
+      setSavedHouseholdId(null);
 
       setOccupationDetails({
         'Self-employed': '',
@@ -346,6 +360,20 @@ export default function HouseholdForm() {
 
 
         setMembers(loadedMembers);
+        setIncomeProofFiles([]);
+
+        // Load household-level income proof metadata and temporary signed URLs.
+        setIncomeProofLoading(true);
+        try {
+          const proofResponse = await api.get(`/households/${editId}/income-proofs`);
+          setIncomeProofs(Array.isArray(proofResponse?.proofs) ? proofResponse.proofs : []);
+        } catch (proofError) {
+          console.error('Could not load household income proofs:', proofError);
+          setIncomeProofs([]);
+             toast.error('Household loaded, but income proof documents could not be loaded.');
+        } finally {
+          setIncomeProofLoading(false);
+        }
 
       } catch (err) {
         toast.error(
@@ -359,6 +387,46 @@ export default function HouseholdForm() {
     loadHousehold();
   }, [editId]);
 
+
+  // ============================================================
+  // HOUSEHOLD INCOME PROOF FILES
+  // ============================================================
+
+  const handleIncomeProofSelection = (event) => {
+    const selected = Array.from(event.target.files || []);
+    event.target.value = '';
+    if (!selected.length) return;
+
+    const combined = [...incomeProofFiles, ...selected];
+    if (combined.length > MAX_INCOME_PROOF_FILES) {
+      toast.error(`You can upload up to ${MAX_INCOME_PROOF_FILES} images for household income.`);
+      return;
+    }
+    const invalid = selected.find((file) => !ALLOWED_INCOME_PROOF_TYPES.includes(file.type));
+    if (invalid) {
+      toast.error('Only JPG, PNG, and WEBP images are allowed.');
+      return;
+    }
+    const tooLarge = selected.find((file) => file.size > MAX_INCOME_PROOF_SIZE);
+    if (tooLarge) {
+      toast.error('Each image must be 5 MB or smaller.');
+      return;
+    }
+    setIncomeProofFiles(combined);
+  };
+
+  const removeIncomeProofFile = (index) => {
+    setIncomeProofFiles((previous) => previous.filter((_, i) => i !== index));
+  };
+
+  const uploadHouseholdIncomeProofs = async (householdId) => {
+    if (!incomeProofFiles.length) return;
+    const body = new FormData();
+    incomeProofFiles.forEach((file) => body.append('files', file));
+    const response = await api.post(`/households/${householdId}/income-proofs`, body);
+    setIncomeProofs((previous) => [...(response?.proofs || []), ...previous]);
+    setIncomeProofFiles([]);
+  };
 
   // ============================================================
   // HOUSEHOLD INPUT HANDLER
@@ -784,13 +852,13 @@ if (duplicateCheck?.duplicate) {
       // SAVE HOUSEHOLD
       // --------------------------------------------------------
 
-      let householdId = editId;
+      let householdId = editId || savedHouseholdId;
 
 
-      if (editId) {
+      if (householdId) {
 
         await api.put(
-          `/households/${editId}`,
+          `/households/${householdId}`,
           payload
         );
 
@@ -805,6 +873,7 @@ if (duplicateCheck?.duplicate) {
           result?.household?.household_id ||
           result?.household_id ||
           result?.id;
+        if (householdId) setSavedHouseholdId(householdId);
       }
 
 
@@ -818,6 +887,13 @@ if (duplicateCheck?.duplicate) {
         );
       }
 
+
+      // --------------------------------------------------------
+      // UPLOAD HOUSEHOLD-LEVEL INCOME PROOFS
+      // --------------------------------------------------------
+      if (incomeProofFiles.length > 0) {
+        await uploadHouseholdIncomeProofs(householdId);
+      }
 
       // --------------------------------------------------------
       // SAVE TEMPORARY MEMBERS
@@ -1536,8 +1612,7 @@ if (duplicateCheck?.duplicate) {
             />
 
 
-            <Row label="Monthly Income">
-
+            <Row label="Household Monthly Income (₱)">
               <input
                 className={textCls}
                 type="number"
@@ -1545,9 +1620,60 @@ if (duplicateCheck?.duplicate) {
                 step="0.01"
                 value={form.monthly_income}
                 onChange={set('monthly_income')}
+                placeholder="Enter total household monthly income"
               />
-
             </Row>
+
+            <div className="md:col-span-2 rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div className="flex flex-col gap-2">
+                <div>
+                  <h4 className="font-semibold text-xl text-gray-800">Household Income Proof</h4>
+                  <p className="text-lg text-gray-600">Attach one or more supporting images for the household's monthly income. JPG, PNG, or WEBP; maximum 5 images.</p>
+                </div>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  onChange={handleIncomeProofSelection}
+                  className="block w-full text-xl text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-gray-200 file:px-4 file:py-2 file:font-semibold"
+                  disabled={busy}
+                />
+                {incomeProofFiles.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-gray-700">Selected images (uploaded when you save the household):</p>
+                    {incomeProofFiles.map((file, index) => (
+                      <div key={`${file.name}-${file.lastModified}-${index}`} className="flex items-center justify-between gap-3 rounded bg-white px-3 py-2 text-sm">
+                        <span className="min-w-0 truncate">{file.name} · {(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                        <button type="button" className="text-red-600 hover:underline" onClick={() => removeIncomeProofFile(index)}>Remove</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="border-t border-gray-200 pt-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-lg font-semibold text-gray-700">Uploaded household income proof</p>
+                    <span className="text-lg font-medium text-gray-600">
+                      {incomeProofs.length} image{incomeProofs.length === 1 ? '' : 's'} uploaded
+                    </span>
+                  </div>
+                  {incomeProofLoading ? (
+                    <p className="mt-2 text-sm text-gray-500">Loading proof documents…</p>
+                  ) : incomeProofs.length ? (
+                    <ul className="mt-2 space-y-2">
+                      {incomeProofs.map((proof) => (
+                        <li key={proof.proof_id} className="flex flex-wrap items-center justify-between gap-2 rounded bg-white px-3 py-2 text-sm">
+                          <span className="min-w-0 truncate">{proof.original_file_name}</span>
+                          {proof.signed_url && <a className="font-semibold text-brand underline" href={proof.signed_url} target="_blank" rel="noreferrer">View image</a>}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-lg text-gray-500">No household income proof has been uploaded.</p>
+                  )}
+                  <p className="mt-2 text-lg text-gray-500">Uploaded documents are private and stored with this household record.</p>
+                </div>
+              </div>
+            </div>
 
           </div>
 

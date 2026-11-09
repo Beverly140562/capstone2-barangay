@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
@@ -13,6 +13,7 @@ import {
   Spinner,
   Input,
 } from '../components/ui';
+import toast from 'react-hot-toast';
 
 function normalizeSuggestedPrograms(value) {
   if (!value) return [];
@@ -445,6 +446,22 @@ const programNames = programs
 
 function HouseholdDrawer({ data, onClose, reload }) {
   const { user } = useAuth();
+  const [incomeProofs, setIncomeProofs] = useState([]);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [uploadingProofs, setUploadingProofs] = useState(false);
+  const [loadingProofs, setLoadingProofs] = useState(false);
+  const [previewImage, setPreviewImage] = useState(null);
+
+  const fileInputRef = useRef(null);
+
+  const MAX_FILES = 5;
+  const MAX_FILE_SIZE = 5 * 1024 * 1024;
+
+  const allowedImageTypes = [
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+  ];
 
   const household =
   data?.household ??
@@ -457,8 +474,6 @@ const members = Array.isArray(data?.members)
   ? data.data.members
   : [];
 
-  if (!household) return null;
-
   // The household record represents one person.
 // The members array contains the additional people.
 const totalFamilySize = members.length + 1;
@@ -468,22 +483,169 @@ const totalFamilySize = members.length + 1;
     user?.roles === 'admin' ||
     user?.roles === 'staff';
 
-  const validate = async () => {
-    try {
-      await api.patch(
-        `/validation/households/${household.household_id}/validate`,
-        {}
-      );
+ const loadIncomeProofs = useCallback(async () => {
+  if (!household?.household_id) return;
 
-      onClose();
-      await reload();
-    } catch (err) {
-      console.error('Failed to validate household:', err);
-      window.alert(
-        err?.message || 'Failed to validate household.'
-      );
+  setLoadingProofs(true);
+
+  try {
+    const result = await api.get(
+      `/households/${encodeURIComponent(
+        household.household_id
+      )}/income-proofs`
+    );
+
+    setIncomeProofs(
+      Array.isArray(result?.images) ? result.images : []
+    );
+  } catch (err) {
+    console.error('Failed to load income proofs:', err);
+
+    toast.error(
+      err?.message || 'Failed to load income-proof images.'
+    );
+  } finally {
+    setLoadingProofs(false);
+  }
+}, [household?.household_id]);
+
+if (!household) {
+  return null;
+}
+
+  const handleProofSelection = (event) => {
+  const files = Array.from(event.target.files || []);
+
+  if (!files.length) {
+    setSelectedFiles([]);
+    return;
+  }
+
+  if (files.length > MAX_FILES) {
+    toast.error('You can select a maximum of 5 images at a time.');
+    event.target.value = '';
+    return;
+  }
+
+  const invalidType = files.find(
+    (file) => !allowedImageTypes.includes(file.type)
+  );
+
+  if (invalidType) {
+    toast.error('Only JPG, PNG, and WEBP images are allowed.');
+    event.target.value = '';
+    return;
+  }
+
+  const oversized = files.find(
+    (file) => file.size > MAX_FILE_SIZE
+  );
+
+  if (oversized) {
+    toast.error('Each image must be 5 MB or smaller.');
+    event.target.value = '';
+    return;
+  }
+
+  setSelectedFiles(files);
+};
+
+  const uploadIncomeProofs = async () => {
+  if (!selectedFiles.length) {
+    toast.error('Please select at least one image.');
+    return;
+  }
+
+  if (!canEdit) {
+    toast.error('You do not have permission to upload images.');
+    return;
+  }
+
+  setUploadingProofs(true);
+
+  try {
+    const formData = new FormData();
+
+    selectedFiles.forEach((file) => {
+      formData.append('files', file);
+    });
+
+    await api.postForm(
+      `/households/${encodeURIComponent(
+        household.household_id
+      )}/income-proofs`,
+      formData
+    );
+
+    setSelectedFiles([]);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
-  };
+
+    toast.success('Income-proof images uploaded successfully.');
+
+    await loadIncomeProofs();
+  } catch (err) {
+    console.error('Income-proof upload failed:', err);
+
+    toast.error(
+      err?.message || 'Failed to upload income-proof images.'
+    );
+  } finally {
+    setUploadingProofs(false);
+  }
+};
+  
+
+  const removeIncomeProof = async (image) => {
+  if (!canEdit || !image?.path) return;
+
+  const confirmed = window.confirm(
+    'Are you sure you want to remove this income-proof image?'
+  );
+
+  if (!confirmed) return;
+
+  try {
+    await api.del(
+      `/households/${encodeURIComponent(
+        household.household_id
+      )}/income-proofs`,
+      { path: image.path }
+    );
+
+    toast.success('Income-proof image removed successfully.');
+
+    await loadIncomeProofs();
+  } catch (err) {
+    console.error('Failed to remove income proof:', err);
+
+    toast.error(
+      err?.message || 'Failed to remove income-proof image.'
+    );
+  }
+};
+
+  const validate = async () => {
+  try {
+    await api.patch(
+      `/validation/households/${household.household_id}/validate`,
+      {}
+    );
+
+    toast.success('Household validated successfully.');
+
+    onClose();
+    await reload();
+  } catch (err) {
+    console.error('Failed to validate household:', err);
+
+    toast.error(
+      err?.message || 'Failed to validate household.'
+    );
+  }
+};
 
   const programs = normalizeSuggestedPrograms(
   household.suggested_programs
@@ -638,6 +800,146 @@ const totalFamilySize = members.length + 1;
   )}
 </div>
         </section>
+
+        {/* Income Proof Images */}
+<section className="mt-6">
+  <div className="flex items-center justify-between gap-3 mb-3">
+    <div>
+      <h3 className="font-bold text-lg">
+        Household Income Proof
+      </h3>
+      <p className="text-sm text-gray-700">
+        Supporting income documents and images
+      </p>
+    </div>
+
+    <Badge>
+      {incomeProofs.length} image(s)
+    </Badge>
+  </div>
+
+  {canEdit && (
+    <div className="border border-dashed border-gray-300 rounded-lg p-4">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        multiple
+        onChange={handleProofSelection}
+        className="block w-full text-lg"
+      />
+
+      <p className="text-sm text-gray-500 mt-2">
+        JPG, PNG, or WEBP. Maximum 5 images per upload.
+      </p>
+
+      {selectedFiles.length > 0 && (
+        <div className="mt-3 space-y-2">
+          <p className="font-medium text-lg">
+            Selected images ({selectedFiles.length})
+          </p>
+
+          {selectedFiles.map((file, index) => (
+            <div
+              key={`${file.name}-${index}`}
+              className="text-sm text-gray-600 flex justify-between"
+            >
+              <span className="truncate">{file.name}</span>
+              <span>
+                {(file.size / 1024 / 1024).toFixed(2)} MB
+              </span>
+            </div>
+          ))}
+
+          <Button
+            onClick={uploadIncomeProofs}
+            disabled={uploadingProofs}
+          >
+            {uploadingProofs
+              ? 'Uploading...'
+              : 'Upload Images'}
+          </Button>
+        </div>
+      )}
+    </div>
+  )}
+
+
+  {loadingProofs ? (
+    <p className="text-sm text-gray-500 mt-4">
+      Loading income-proof images...
+    </p>
+  ) : incomeProofs.length > 0 ? (
+    <div className="grid grid-cols-2 gap-3 mt-4">
+      {incomeProofs.map((image) => (
+        <div
+          key={image.path}
+          className="border rounded-lg overflow-hidden"
+        >
+          <button
+            type="button"
+            onClick={() => setPreviewImage(image)}
+            className="block w-full"
+          >
+            <img
+              src={image.url}
+              alt="Household income proof"
+              className="w-full h-36 object-cover"
+            />
+          </button>
+
+          <div className="p-2 flex justify-between items-center gap-2">
+            <span className="text-sm text-gray-500 truncate">
+              {image.name || 'Income proof'}
+            </span>
+
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => removeIncomeProof(image)}
+                className="text-red-600 text-sm hover:underline"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  ) : (
+    <p className="text-sm text-gray-400 mt-4">
+      No income-proof images uploaded.
+    </p>
+  )}
+</section>
+
+{/* Full Image Preview */}
+{previewImage && (
+  <div
+    className="fixed inset-0 z-[70] bg-black/80 flex items-center justify-center p-4"
+    onClick={() => setPreviewImage(null)}
+  >
+    <div
+      className="relative max-w-4xl max-h-[90vh]"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <button
+        type="button"
+        onClick={() => setPreviewImage(null)}
+        className="absolute -top-10 right-0 text-white text-2xl"
+        aria-label="Close image preview"
+      >
+        ✕
+      </button>
+
+      <img
+        src={previewImage.url}
+        alt="Income proof preview"
+        className="max-w-full max-h-[85vh] object-contain rounded-lg"
+      />
+    </div>
+  </div>
+)}
 
         {/* Household Members */}
         <section className="mt-6">
