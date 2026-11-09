@@ -39,6 +39,9 @@ export default function Approve() {
   const [selectedHousehold, setSelectedHousehold] = useState(null);
   const [selectedCalamity, setSelectedCalamity] = useState(null);
 
+  const [incomeProofImages, setIncomeProofImages] = useState([]);
+  const [loadingIncomeProof, setLoadingIncomeProof] = useState(false);
+
   /* =========================================================
      LOAD NORMAL HOUSEHOLDS
   ========================================================= */
@@ -74,6 +77,43 @@ export default function Approve() {
     setLoadingHouseholds(false);
   }
 }, []);
+
+
+
+const loadIncomeProofImages = useCallback(async (householdId) => {
+  if (!householdId) {
+    setIncomeProofImages([]);
+    return;
+  }
+
+  try {
+    setLoadingIncomeProof(true);
+    setIncomeProofImages([]);
+
+    const data = await api.get(
+      `/households/${householdId}/income-proofs`
+    );
+
+    setIncomeProofImages(
+      Array.isArray(data?.images) ? data.images : []
+    );
+  } catch (error) {
+    console.error(
+      'Failed to load household income-proof images:',
+      error
+    );
+
+    setIncomeProofImages([]);
+
+    toast.error(
+      error?.response?.data?.error ||
+      'Failed to load income-proof images.'
+    );
+  } finally {
+    setLoadingIncomeProof(false);
+  }
+}, []);
+
 
   /* =========================================================
      LOAD CALAMITY PROGRAMS
@@ -124,6 +164,20 @@ export default function Approve() {
     loadHouseholds,
     loadCalamityPrograms,
   ]);
+
+  useEffect(() => {
+  const householdId =
+    selectedHousehold?.household?.household_id;
+
+  if (householdId) {
+    loadIncomeProofImages(householdId);
+  } else {
+    setIncomeProofImages([]);
+  }
+}, [
+  selectedHousehold?.household?.household_id,
+  loadIncomeProofImages,
+]);
 
   /* =========================================================
      NORMAL HOUSEHOLD MODAL
@@ -765,7 +819,7 @@ const closeCalamityDecision = () => {
           onClick={closeHouseholdDecision}
         >
           <div
-            className="w-full max-w-xl rounded-xl bg-white p-6 shadow-xl"
+            className="w-full max-w-6xl rounded-xl bg-white p-5 shadow-xl"
             onClick={(e) =>
               e.stopPropagation()
             }
@@ -837,6 +891,87 @@ const closeCalamityDecision = () => {
 
             </div>
 
+            
+{/* INCOME-PROOF IMAGES */}
+
+<div className="mt-5 rounded-lg border border-gray-200 bg-white p-4">
+
+  <div className="mb-3 flex items-center justify-between">
+    <h4 className="text-lg font-bold text-ink">
+      Household Income Proof
+    </h4>
+
+    <span
+      className={
+        incomeProofImages.length > 0
+          ? 'rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700'
+          : 'rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-700'
+      }
+    >
+      {incomeProofImages.length > 0
+        ? `${incomeProofImages.length} Image(s) Uploaded`
+        : 'No Image Uploaded'}
+    </span>
+  </div>
+
+  {loadingIncomeProof ? (
+    <div className="flex justify-center py-8">
+      <Spinner />
+    </div>
+  ) : incomeProofImages.length > 0 ? (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+
+      {incomeProofImages.map((image, index) => (
+        <div
+          key={image.path || index}
+          className="overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
+        >
+          <a
+            href={image.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="View full-size income-proof image"
+          >
+            <img
+              src={image.url}
+              alt={`Household income proof ${index + 1}`}
+              className="h-56 w-full cursor-zoom-in object-contain bg-gray-100"
+            />
+          </a>
+
+          <div className="flex items-center justify-between gap-2 p-3">
+            <span className="truncate text-sm font-medium text-ink">
+              Income Proof {index + 1}
+            </span>
+
+            <a
+              href={image.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="shrink-0 text-sm font-semibold text-[#6E2430] hover:underline"
+            >
+              View Full Image
+            </a>
+          </div>
+        </div>
+      ))}
+
+    </div>
+  ) : (
+    <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-4 py-6 text-center">
+      <p className="font-semibold text-amber-800">
+        No income-proof image is available.
+      </p>
+
+      <p className="mt-1 text-sm text-amber-700">
+        An income-proof image is required before this household can be approved for assistance.
+      </p>
+    </div>
+  )}
+
+</div>
+
+
             {/* REMARKS */}
 
             <div className="mt-4">
@@ -906,7 +1041,13 @@ const closeCalamityDecision = () => {
                 onClick={
                   decideHousehold
                 }
-                disabled={saving}
+                disabled={
+  saving ||
+  (
+    selectedHousehold.decision === 'Approved' &&
+    (loadingIncomeProof || incomeProofImages.length === 0)
+  )
+}
               >
                 {saving
                   ? 'Saving...'

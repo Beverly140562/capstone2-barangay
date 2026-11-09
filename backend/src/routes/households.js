@@ -505,6 +505,7 @@ async function createIncomeProofImage(supabaseAdmin, path) {
 |--------------------------------------------------------------------------
 */
 
+
 router.post(
   '/:householdId/income-proofs',
   requireRole('admin', 'staff'),
@@ -539,9 +540,7 @@ router.post(
 
       const supabaseAdmin = getIncomeProofSupabaseAdmin();
 
-      /*
-       * Upload image files to private Supabase Storage.
-       */
+      // Upload images to Supabase Storage.
       for (const file of files) {
         const extension = INCOME_PROOF_TYPES.get(file.mimetype);
 
@@ -549,8 +548,7 @@ router.post(
           throw new Error('Unsupported image type.');
         }
 
-        const path =
-          `${householdId}/${randomUUID()}.${extension}`;
+        const path = `${householdId}/${randomUUID()}.${extension}`;
 
         const { error: uploadError } = await supabaseAdmin.storage
           .from(INCOME_PROOF_BUCKET)
@@ -560,24 +558,21 @@ router.post(
             upsert: false,
           });
 
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          throw uploadError;
+        }
 
         uploadedPaths.push(path);
       }
 
-      /*
-       * Generate signed URLs before saving the paths.
-       */
+      // Generate signed image URLs.
       const images = await Promise.all(
         uploadedPaths.map((path) =>
           createIncomeProofImage(supabaseAdmin, path)
         )
       );
 
-      /*
-       * Save paths directly to the households table.
-       * The array concatenation preserves previously uploaded images.
-       */
+      // Save image paths without removing existing images.
       const updatedRows = await query(
         `
           UPDATE households
@@ -594,16 +589,30 @@ router.post(
         throw new Error('Unable to save image paths to household.');
       }
 
+      // Refresh vulnerability and assistance suggestions.
+      // Existing images now satisfy the income-proof requirement.
+      let predictionRefreshed = true;
+
+      try {
+        await refreshHouseholdPrediction(householdId);
+      } catch (predictionError) {
+        predictionRefreshed = false;
+
+        console.error(
+          'Income proof uploaded, but prediction refresh failed:',
+          predictionError
+        );
+      }
+
       return res.status(201).json({
         success: true,
         message: 'Household income-proof images uploaded successfully.',
         images,
+        prediction_refreshed: predictionRefreshed,
       });
 
     } catch (error) {
-      /*
-       * Remove uploaded files if saving fails.
-       */
+      // Clean up uploaded files if the upload operation fails.
       if (uploadedPaths.length) {
         try {
           const supabaseAdmin = getIncomeProofSupabaseAdmin();
@@ -611,7 +620,6 @@ router.post(
           await supabaseAdmin.storage
             .from(INCOME_PROOF_BUCKET)
             .remove(uploadedPaths);
-
         } catch (cleanupError) {
           console.error(
             'Income-proof upload cleanup failed:',
@@ -633,6 +641,7 @@ router.post(
     }
   }
 );
+
 
 /*
 |--------------------------------------------------------------------------
@@ -729,6 +738,7 @@ router.get(
 |--------------------------------------------------------------------------
 */
 
+
 router.delete(
   '/:householdId/income-proofs',
   requireRole('admin', 'staff'),
@@ -747,6 +757,7 @@ router.delete(
         });
       }
 
+      // Get existing household image paths.
       const householdRows = await query(
         `
           SELECT
@@ -775,9 +786,7 @@ router.delete(
         });
       }
 
-      /*
-       * Remove the path from the household record first.
-       */
+      // Remove the image path from the database.
       const updatedRows = await query(
         `
           UPDATE households
@@ -793,27 +802,12 @@ router.delete(
       );
 
       if (!updatedRows.length) {
-        return res.status(500).json({
-          error: 'Unable to update household image records.',
-        });
+        throw new Error(
+          'Unable to update household income-proof images.'
+        );
       }
 
-      /*
- * Generate assistance suggestions now that income proof exists.
- * Upload success must not be reversed if the ML service is unavailable.
- */
-try {
-  await refreshHouseholdPrediction(householdId);
-} catch (predictionError) {
-  console.error(
-    'Income proof uploaded, but prediction refresh failed:',
-    predictionError
-  );
-}
-
-      /*
-       * Remove the actual image from Supabase Storage.
-       */
+      // Delete the actual file from Supabase Storage.
       const supabaseAdmin = getIncomeProofSupabaseAdmin();
 
       const { error: deleteError } = await supabaseAdmin.storage
@@ -821,9 +815,7 @@ try {
         .remove([path]);
 
       if (deleteError) {
-        /*
-         * Restore the path if Storage deletion fails.
-         */
+        // Restore the database path if Storage deletion fails.
         await query(
           `
             UPDATE households
@@ -846,9 +838,41 @@ try {
         throw deleteError;
       }
 
+      const remainingPaths =
+        updatedRows[0].income_proof_images || [];
+
+      let predictionRefreshed = true;
+
+      if (remainingPaths.length === 0) {
+        // No income-proof images remain.
+        // Clear suggested programs but preserve vulnerability.
+        await query(
+          `
+            UPDATE households
+            SET suggested_programs = ARRAY[]::TEXT[]
+            WHERE household_id = $1
+          `,
+          [householdId]
+        );
+      } else {
+        // Other images remain, so refresh program recommendations.
+        try {
+          await refreshHouseholdPrediction(householdId);
+        } catch (predictionError) {
+          predictionRefreshed = false;
+
+          console.error(
+            'Image deleted, but prediction refresh failed:',
+            predictionError
+          );
+        }
+      }
+
       return res.json({
         success: true,
         message: 'Income-proof image deleted successfully.',
+        remaining_images: remainingPaths.length,
+        prediction_refreshed: predictionRefreshed,
       });
 
     } catch (error) {
@@ -865,6 +889,7 @@ try {
     }
   }
 );
+
 
 
 /*
