@@ -719,7 +719,6 @@ const uploadHouseholdIncomeProofs = async (householdId) => {
 
     setIncomeProofFiles([]);
 
-    toast.success('Income-proof images uploaded successfully.');
   } catch (error) {
     console.error('Income-proof upload failed:', error);
     throw error;

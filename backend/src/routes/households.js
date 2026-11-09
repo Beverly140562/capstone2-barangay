@@ -256,6 +256,30 @@ async function updateById(
   return rows[0] || null;
 }
 
+function hasIncomeProofImages(household) {
+  return (
+    Array.isArray(household?.income_proof_images) &&
+    household.income_proof_images.some(
+      (path) => typeof path === 'string' && path.trim().length > 0
+    )
+  );
+}
+
+function applyIncomeProofGate(prediction, household) {
+  const suggestedPrograms = hasIncomeProofImages(household)
+    ? (
+        Array.isArray(prediction?.suggested_programs)
+          ? prediction.suggested_programs
+          : []
+      )
+    : [];
+
+  return {
+    ...prediction,
+    suggested_programs: suggestedPrograms,
+  };
+}
+
 
 
 async function refreshHouseholdPrediction(householdId) {
@@ -280,7 +304,12 @@ async function refreshHouseholdPrediction(householdId) {
 
     console.log('[PREDICT] Step 3: Calling ML service.');
 
-    const prediction = await predictHousehold(rows[0]);
+const rawPrediction = await predictHousehold(rows[0]);
+
+const prediction = applyIncomeProofGate(
+  rawPrediction,
+  rows[0]
+);
 
     console.log('[PREDICT] Step 4: ML prediction received:', {
       vulnerability: prediction.vulnerability,
@@ -768,6 +797,19 @@ router.delete(
           error: 'Unable to update household image records.',
         });
       }
+
+      /*
+ * Generate assistance suggestions now that income proof exists.
+ * Upload success must not be reversed if the ML service is unavailable.
+ */
+try {
+  await refreshHouseholdPrediction(householdId);
+} catch (predictionError) {
+  console.error(
+    'Income proof uploaded, but prediction refresh failed:',
+    predictionError
+  );
+}
 
       /*
        * Remove the actual image from Supabase Storage.
@@ -1258,8 +1300,12 @@ router.post(
        * the household.
        */
       try {
-        const prediction = await predictHousehold(household);
+const rawPrediction = await predictHousehold(household);
 
+const prediction = applyIncomeProofGate(
+  rawPrediction,
+  household
+);
         await query(
           `
             UPDATE households
@@ -1439,8 +1485,12 @@ if (
        * Do not change validation_status automatically.
        */
       try {
-        const prediction = await predictHousehold(household);
+const rawPrediction = await predictHousehold(household);
 
+const prediction = applyIncomeProofGate(
+  rawPrediction,
+  household
+);
         await query(
           `
             UPDATE households

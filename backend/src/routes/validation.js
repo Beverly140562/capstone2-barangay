@@ -209,19 +209,40 @@ router.post(
       // ------------------------------------------------
 
       const household = await query(
-        `
-        SELECT household_id
-        FROM households
-        WHERE household_id = $1::uuid
-        `,
-        [household_id]
-      );
+  `
+  SELECT
+    household_id,
+    COALESCE(income_proof_images, ARRAY[]::TEXT[])
+      AS income_proof_images
+  FROM households
+  WHERE household_id = $1::uuid
+  `,
+  [household_id]
+);
 
       if (!household[0]) {
         return res.status(404).json({
           error: 'Household not found.',
         });
       }
+
+      // ------------------------------------------------
+// REQUIRE INCOME-PROOF IMAGE
+// ------------------------------------------------
+
+const hasIncomeProof =
+  Array.isArray(household[0].income_proof_images) &&
+  household[0].income_proof_images.some(
+    (path) => typeof path === 'string' && path.trim().length > 0
+  );
+
+if (!hasIncomeProof) {
+  return res.status(400).json({
+    error:
+      'This household cannot be submitted for assistance because no income-proof image has been uploaded. Please upload at least one income-proof image first.',
+    code: 'INCOME_PROOF_REQUIRED',
+  });
+}
 
       // ------------------------------------------------
       // VERIFY PROGRAM
@@ -479,6 +500,7 @@ router.patch(
 
           h.household_head_name,
           h.user_id,
+          h.income_proof_images,
           encoder.full_name AS encoded_by,
 
           p.program_name
@@ -522,6 +544,26 @@ router.patch(
             `${validation.validation_status}.`,
         });
       }
+
+      // ------------------------------------------------
+// RECHECK INCOME-PROOF IMAGE BEFORE APPROVAL
+// ------------------------------------------------
+
+if (decision === 'Approved') {
+  const hasIncomeProof =
+    Array.isArray(validation.income_proof_images) &&
+    validation.income_proof_images.some(
+      (path) => typeof path === 'string' && path.trim().length > 0
+    );
+
+  if (!hasIncomeProof) {
+    return res.status(400).json({
+      error:
+        'Approval is not allowed because this household has no income-proof image. Please upload an income-proof image before approving this beneficiary.',
+      code: 'INCOME_PROOF_REQUIRED',
+    });
+  }
+}
 
       // ------------------------------------------------
       // UPDATE VALIDATION

@@ -8,6 +8,9 @@ const {
   logActivity,
 } = require('../middleware/auth');
 
+
+
+
 router.use(auth);
 
 // ==================================================
@@ -337,23 +340,36 @@ router.post(
       // VERIFY HOUSEHOLD
       // ------------------------------------------------
       const householdRows = await query(
-        `
-        SELECT
-          household_id,
-          household_head_name,
-          purok
-        FROM households
-        WHERE household_id = $1
-        `,
-        [household_id]
-      );
+  `
+  SELECT household_id, income_proof_images
+  FROM households
+  WHERE household_id = $1
+  `,
+  [household_id]
+);
 
-      if (!householdRows[0]) {
-        return res.status(404).json({
-          message:
-            'Household not found.',
-        });
-      }
+if (!householdRows[0]) {
+  return res.status(404).json({
+    error: 'Household not found.',
+  });
+}
+
+const images = householdRows[0].income_proof_images;
+
+const hasIncomeProof =
+  Array.isArray(images) &&
+  images.some(
+    (image) =>
+      typeof image === 'string' &&
+      image.trim().length > 0
+  );
+
+if (!hasIncomeProof) {
+  return res.status(400).json({
+    error:
+      'An income-proof image must be uploaded before this household can receive an assistance-program recommendation or be submitted for beneficiary validation.',
+  });
+}
 
       // ------------------------------------------------
       // VERIFY PROGRAM

@@ -15,6 +15,20 @@ import {
 
 import { useNavigate } from 'react-router-dom';
 
+function hasIncomeProof(household) {
+  const images = household?.income_proof_images;
+
+  return (
+    Array.isArray(images) &&
+    images.some(
+      (image) =>
+        typeof image === 'string'
+          ? image.trim().length > 0
+          : Boolean(image)
+    )
+  );
+}
+
 export default function Suggestions() {
   // ==================================================
   // STATE
@@ -400,7 +414,9 @@ const normalizeSuggestedPrograms = (suggestedPrograms) => {
   const suggestedPrograms = useMemo(() => {
   const programMap = new Map();
 
-  households.forEach((household) => {
+  households
+  .filter(hasIncomeProof)
+  .forEach((household) => {
     const normalized = normalizeSuggestedPrograms(
       household.suggested_programs
     );
@@ -493,10 +509,11 @@ const normalizeSuggestedPrograms = (suggestedPrograms) => {
   };
 
   return households
-    .filter((household) => {
-      const suggested = normalizeSuggestedPrograms(
-        household.suggested_programs
-      );
+  .filter(hasIncomeProof)
+  .filter((household) => {
+    const suggested = normalizeSuggestedPrograms(
+      household.suggested_programs
+    );
 
       return suggested.some(
         (program) =>
@@ -631,6 +648,13 @@ const generatedHouseholds =
   ) => {
     if (!generated) return;
 
+    if (!hasIncomeProof(household)) {
+  toast.error(
+    'This household cannot be added because no income-proof image has been uploaded.'
+  );
+  return;
+}
+
     if (!household?.household_id) {
       toast.error(
         'Invalid household.'
@@ -712,6 +736,8 @@ const generatedHouseholds =
       }
     );
   };
+
+
 
   // ==================================================
   // REMOVE HOUSEHOLD
@@ -844,6 +870,16 @@ const generatedHouseholds =
         for (const household of generated.selected) {
           const householdId =
             household?.household_id;
+
+          if (!hasIncomeProof(household)) {
+            console.warn(
+              'Skipped household without income proof:',
+              householdId
+            );
+
+            skipped++;
+            continue;
+          }
 
           if (!householdId) {
             console.error(
@@ -1040,7 +1076,7 @@ const generatedHouseholds =
   // ADD ALL
   // ==================================================
 
- const handleAddAll = () => {
+const handleAddAll = () => {
   if (!generated) return;
 
   setGenerated((previous) => {
@@ -1052,27 +1088,27 @@ const generatedHouseholds =
       )
     );
 
-    const newItems = previous.available.filter(
-      (item) => {
-        const householdId = String(item.household_id);
+    const newItems = previous.available.filter((item) => {
+      if (!hasIncomeProof(item)) return false;
 
-        if (selectedIds.has(householdId)) {
-          return false;
-        }
+      const householdId = String(item.household_id);
 
-        const existing = getProgramValidation(
-          householdId,
-          previous.program_id
-        );
-
-        return !(
-          existing &&
-          ['Pending', 'Approved'].includes(
-            String(existing.validation_status)
-          )
-        );
+      if (selectedIds.has(householdId)) {
+        return false;
       }
-    );
+
+      const existing = getProgramValidation(
+        householdId,
+        previous.program_id
+      );
+
+      return !(
+        existing &&
+        ['Pending', 'Approved'].includes(
+          String(existing.validation_status)
+        )
+      );
+    });
 
     return {
       ...previous,
@@ -1080,7 +1116,13 @@ const generatedHouseholds =
         ...previous.selected,
         ...newItems,
       ],
-      available: [],
+      available: previous.available.filter(
+        (item) => !newItems.some(
+          (selected) =>
+            String(selected.household_id) ===
+            String(item.household_id)
+        )
+      ),
     };
   });
 };
@@ -1607,36 +1649,34 @@ const generatedHouseholds =
                       </span>
                     </td>
 
-                    <td className="px-5 py-3">
-                      <div className="flex flex-wrap gap-1">
-  {normalizeSuggestedPrograms(
-    household.suggested_programs
-  ).length > 0 ? (
-    normalizeSuggestedPrograms(
-      household.suggested_programs
-    ).map((program) => {
-      const isSelected =
-        String(program.program_id) ===
-        String(generated.program_id);
-
-      return (
-        <span
-          key={`${household.household_id}-${program.program_id}`}
-          className={
-            isSelected
-              ? 'px-2 py-1 rounded bg-[#6E2430] text-white font-bold'
-              : 'px-2 py-1 rounded text-[#6E2430]'
-          }
-        >
-          {program.program_name}
-        </span>
-      );
-    })
+                    <td className="px-5 py-4 text-2xl font-medium">
+  {!hasIncomeProof(household) ? (
+    <span className="text-amber-700 text-lg font-semibold">
+      Income-proof image required
+    </span>
   ) : (
-    '—'
+    (() => {
+      const normalized = normalizeSuggestedPrograms(
+        household.suggested_programs
+      );
+
+      return normalized.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {normalized.map((program) => (
+            <span
+              key={`${household.household_id}-${program.program_id}`}
+              className="text-[#6E2430] text-xl font-medium"
+            >
+              {program.program_name}
+            </span>
+          ))}
+        </div>
+      ) : (
+        '—'
+      );
+    })()
   )}
-</div>
-                    </td>
+</td>
 
                     <td className="px-5 py-3">
                       <span className="text-gray-500 font-semibold">
@@ -1990,6 +2030,35 @@ const generatedHouseholds =
                   : ', no stable employment'}
               </span>
             </div>
+<div>
+  <span className="font-bold text-ink">
+    Income Proof:{' '}
+  </span>
+
+  {hasIncomeProof(detail) ? (
+    <span className="text-green-700 font-semibold">
+      Uploaded
+    </span>
+  ) : (
+    <span className="text-amber-700 font-semibold">
+      Required — No income-proof image uploaded
+    </span>
+  )}
+</div>
+
+<div>
+  <span className="font-bold text-ink">
+    Suggested Programs:{' '}
+  </span>
+
+  <span className="text-muted">
+    {!hasIncomeProof(detail)
+      ? 'Unavailable — upload an income-proof image first.'
+      : normalizeSuggestedPrograms(detail.suggested_programs)
+          .map((program) => program.program_name)
+          .join(', ') || 'No matching programs'}
+  </span>
+</div>
 <div>
   <span className="font-bold text-ink">
     Suggested Programs:{' '}
