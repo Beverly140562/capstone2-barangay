@@ -633,11 +633,14 @@ def analytics(
 # ANALYTICS CHART ENDPOINTS
 # ============================================================
 
+
 def get_chart_households():
     """
-    Retrieve actual household-level data for charts.
-    Income is calculated by summing household members'
-    monthly income.
+    Retrieve actual household-level data for analytics charts.
+
+    The households record represents one person.
+    household_members contains the additional members.
+    Household income is the sum of all members' monthly income.
     """
 
     return fetch_all("""
@@ -646,19 +649,36 @@ def get_chart_households():
             h.purok,
             h.vulnerability,
             h.created_at,
-            COUNT(hm.household_id) AS member_count,
-            COALESCE(
-                SUM(COALESCE(hm.monthly_income, 0)),
-                0
+
+            -- Household record + additional members
+            COUNT(hm.household_id) + 1 AS member_count,
+
+            -- Total household size
+            COUNT(hm.household_id) + 1 AS family_size,
+
+            -- Include the household record's income
+            -- and the additional members' income
+            (
+                COALESCE(h.monthly_income, 0)
+                +
+                COALESCE(
+                    SUM(COALESCE(hm.monthly_income, 0)),
+                    0
+                )
             ) AS household_monthly_income
+
         FROM households h
+
         LEFT JOIN household_members hm
             ON hm.household_id = h.household_id
+
         GROUP BY
             h.household_id,
             h.purok,
             h.vulnerability,
-            h.created_at
+            h.created_at,
+            h.monthly_income
+
         ORDER BY h.created_at DESC
     """)
 
