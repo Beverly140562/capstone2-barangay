@@ -58,9 +58,7 @@ const params = new URLSearchParams({
         <h2 className="text-4xl font-bold text-ink">
          Data Analysis
         </h2>
-        <p className="mt-1 text-xl text-gray-500">
-          Statistical visualizations
-        </p>
+        
       </div>
 
       {/* Chart filters */}

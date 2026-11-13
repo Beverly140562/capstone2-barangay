@@ -309,6 +309,36 @@ router.get('/analytics', async (req, res) => {
       totalRows[0]?.total || 0
     );
 
+
+    // -------------------------------------------------------
+    // SUBMITTED HOUSEHOLDS
+    // Count households encoded by STAFF within the selected
+    // date range and Purok filter.
+    // -------------------------------------------------------
+
+    const submittedResult = await query(
+      `
+      SELECT COUNT(*)::int AS total
+      FROM households h
+      INNER JOIN users u
+        ON u.user_id = h.user_id
+      ${householdWhere
+        ? `${householdWhere} AND LOWER(TRIM(u.roles::text)) = 'staff'`
+        : `WHERE LOWER(TRIM(u.roles::text)) = 'staff'`
+      }
+      `,
+      values
+    );
+
+    const submittedRows = Array.isArray(submittedResult)
+      ? submittedResult
+      : submittedResult?.rows || [];
+
+    const submitted_household_count = Number(
+      submittedRows[0]?.total || 0
+    );
+
+
     // -------------------------------------------------------
     // HOUSEHOLDS BY PUROK
     // -------------------------------------------------------
@@ -463,6 +493,8 @@ router.get('/analytics', async (req, res) => {
 
     const analytics = {
       total_households,
+
+      submitted_household_count,
 
       by_purok,
 
