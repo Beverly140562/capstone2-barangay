@@ -449,7 +449,7 @@ def create_feature_relationship_chart(records):
               font-family="Arial"
               font-size="20"
               font-weight="bold"
-              fill="#444444">
+              >
         """
 
         for line_index, line in enumerate(labels):
@@ -484,7 +484,7 @@ def create_feature_relationship_chart(records):
               font-family="Arial"
               font-size="20"
               font-weight="bold"
-              fill="#444444">
+              >
         """
 
         for line_index, line in enumerate(row_labels):
