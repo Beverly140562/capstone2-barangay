@@ -538,9 +538,6 @@ def analytics(
                 d.program_id,
                 p.program_name,
                 d.status,
-                d.release_status,
-                d.amount_released,
-                d.release_date,
                 d.approved_at,
                 d.created_at,
                 d.approved_by
