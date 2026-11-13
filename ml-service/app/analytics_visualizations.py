@@ -398,11 +398,11 @@ def create_feature_relationship_chart(records):
     }
 
     # Layout settings.
-    cell = 110
+    cell = 130
     left = 330
     top = 205
     width = 950
-    height = max(570, top + len(columns) * cell + 130)
+    height = max(570, top + len(columns) * cell + 150)
 
     svg = f"""
     <svg xmlns="http://www.w3.org/2000/svg"
@@ -421,13 +421,6 @@ def create_feature_relationship_chart(records):
             {escape(title)}
         </text>
 
-        <text x="{width / 2}" y="80"
-              text-anchor="middle"
-              font-family="Arial"
-              font-size="14"
-              fill="#777777">
-            Pearson Correlation Coefficient
-        </text>
     """
 
     # Column labels: horizontal and centered.
@@ -442,7 +435,7 @@ def create_feature_relationship_chart(records):
         <text x="{x}" y="{top - 35}"
               text-anchor="middle"
               font-family="Arial"
-              font-size="13"
+              font-size="16"
               font-weight="bold"
               fill="#444444">
         """
@@ -473,7 +466,7 @@ def create_feature_relationship_chart(records):
         <text x="{left - 20}" y="{label_start}"
               text-anchor="end"
               font-family="Arial"
-              font-size="13"
+              font-size="16"
               font-weight="bold"
               fill="#444444">
         """
@@ -545,7 +538,7 @@ def create_feature_relationship_chart(records):
         <text x="{width / 2}" y="{footer_y}"
               text-anchor="middle"
               font-family="Arial"
-              font-size="13"
+              font-size="18"
               fill="#777777">
             Based on {len(records)} household records
         </text>
