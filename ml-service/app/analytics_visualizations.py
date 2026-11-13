@@ -59,7 +59,7 @@ def create_vulnerability_chart(records):
 
     maximum = max(counts.values()) or 1
     chart_left = 210
-    chart_width = 480
+    chart_width = 280
     bar_height = 42
     gap = 24
 
@@ -152,14 +152,14 @@ def create_income_chart(records):
 
     <text x="420" y="555"
           text-anchor="middle"
-          font-family="Arial" font-size="16">
+          font-family="Arial" font-size="20">
         Monthly Income (₱)
     </text>
 
     <text x="25" y="290"
           text-anchor="middle"
           transform="rotate(-90 25 290)"
-          font-family="Arial" font-size="16">
+          font-family="Arial" font-size="20">
         Number of Households
     </text>
     '''
@@ -176,7 +176,7 @@ def create_income_chart(records):
 
         <text x="{left - 12}" y="{y + 5:.2f}"
               text-anchor="end"
-              font-family="Arial" font-size="12">
+              font-family="Arial" font-size="16">
             {count_value:.0f}
         </text>
         '''
@@ -205,7 +205,7 @@ def create_income_chart(records):
         svg += f'''
         <text x="{x:.2f}" y="{bottom + 25}"
               text-anchor="middle"
-              font-family="Arial" font-size="11">
+              font-family="Arial" font-size="16">
             ₱{income:,.0f}
         </text>
         '''
@@ -269,7 +269,7 @@ def create_income_chart(records):
     svg += f'''
     <text x="{right}" y="65"
           text-anchor="end"
-          font-family="Arial" font-size="13"
+          font-family="Arial" font-size="18"
           fill="#555">
         Total households: {len(values)}
     </text>
