@@ -406,7 +406,7 @@ def create_feature_relationship_chart(records):
 
     matrix_size = len(columns) * cell
 
-    width = left + matrix_size + 100
+    width = left + matrix_size + 150
     height = top + matrix_size + 150
 
     svg = f"""
@@ -558,7 +558,7 @@ def create_feature_relationship_chart(records):
         <text x="{width / 2}" y="{footer_y}"
               text-anchor="middle"
               font-family="Arial"
-              font-size="25"
+              font-size="28"
               fill="#777777">
             Based on {len(records)} household records
         </text>
