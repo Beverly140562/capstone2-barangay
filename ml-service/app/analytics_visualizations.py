@@ -50,7 +50,7 @@ def create_vulnerability_chart(records):
 
     if not counts:
         svg += '''
-        <text x="400" y="250" text-anchor="middle"
+        <text x="300" y="250" text-anchor="middle"
               font-family="Arial" font-size="18">
             No data available
         </text>
@@ -59,7 +59,7 @@ def create_vulnerability_chart(records):
 
     maximum = max(counts.values()) or 1
     chart_left = 210
-    chart_width = 280
+    chart_width = 480
     bar_height = 42
     gap = 24
 
