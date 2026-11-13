@@ -168,28 +168,36 @@ router.get('/summary', async (req, res) => {
 
 /*
 |--------------------------------------------------------------------------
-| GET ASSISTANCE DISTRIBUTION
+| GET APPROVED HOUSEHOLDS PER ASSISTANCE PROGRAM
 |--------------------------------------------------------------------------
 */
 router.get('/distribution', async (req, res) => {
   try {
-    const rows = await query(`
+    const result = await query(`
       SELECT
         p.program_id,
         p.program_name,
-        COUNT(d.distribution_id)::int AS released
+        COUNT(DISTINCT bv.household_id)::int AS approved_households
       FROM assistance_programs p
-      LEFT JOIN ml_assistance_distribution d
-        ON d.program_id = p.program_id
+      LEFT JOIN beneficiary_validation bv
+        ON bv.program_id = p.program_id
+        AND LOWER(TRIM(COALESCE(bv.validation_status, ''))) = 'approved'
       GROUP BY
         p.program_id,
         p.program_name
-      ORDER BY released DESC, p.program_name
+      ORDER BY
+        approved_households DESC,
+        p.program_name
     `);
 
+    const rows = Array.isArray(result)
+      ? result
+      : result?.rows || [];
+
     res.json({
-      distribution: rows || [],
+      distribution: rows,
     });
+
   } catch (error) {
     console.error(
       'GET /api/analytics/distribution error:',
@@ -202,7 +210,12 @@ router.get('/distribution', async (req, res) => {
   }
 });
 
-router.get('/analytics', auth, async (req, res) => {
+/*
+|--------------------------------------------------------------------------
+| GET HOUSEHOLD ANALYTICS
+|--------------------------------------------------------------------------
+*/
+router.get('/analytics', async (req, res) => {
   try {
     const {
       dateRange = 'This Month',
@@ -214,145 +227,292 @@ router.get('/analytics', auth, async (req, res) => {
     const conditions = [];
     const values = [];
 
-    /* =========================
-       PUROK FILTER
-    ========================= */
+    // -------------------------------------------------------
+    // PUROK FILTER
+    // -------------------------------------------------------
 
     if (purok && purok !== 'All Puroks') {
       values.push(purok);
-      conditions.push(`purok = $${values.length}`);
+      conditions.push(`h.purok::text = $${values.length}`);
     }
 
-    /* =========================
-       DATE FILTER
-    ========================= */
+    // -------------------------------------------------------
+    // DATE FILTER
+    // -------------------------------------------------------
 
     if (dateRange === 'This Month') {
       conditions.push(`
-        created_at >= date_trunc('month', CURRENT_DATE)
-        AND created_at < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+        h.created_at >= date_trunc('month', CURRENT_DATE)
+        AND h.created_at < date_trunc('month', CURRENT_DATE)
+          + INTERVAL '1 month'
       `);
     }
 
     if (dateRange === 'Last Month') {
       conditions.push(`
-        created_at >= date_trunc('month', CURRENT_DATE) - INTERVAL '1 month'
-        AND created_at < date_trunc('month', CURRENT_DATE)
+        h.created_at >= date_trunc('month', CURRENT_DATE)
+          - INTERVAL '1 month'
+        AND h.created_at < date_trunc('month', CURRENT_DATE)
       `);
     }
 
     if (dateRange === 'This Year') {
       conditions.push(`
-        created_at >= date_trunc('year', CURRENT_DATE)
-        AND created_at < date_trunc('year', CURRENT_DATE) + INTERVAL '1 year'
+        h.created_at >= date_trunc('year', CURRENT_DATE)
+        AND h.created_at < date_trunc('year', CURRENT_DATE)
+          + INTERVAL '1 year'
       `);
     }
 
     if (dateRange === 'Custom') {
       if (startDate) {
         values.push(startDate);
-        conditions.push(`created_at >= $${values.length}`);
+        conditions.push(`h.created_at >= $${values.length}::date`);
       }
 
       if (endDate) {
         values.push(endDate);
-        conditions.push(
-          `created_at < ($${values.length}::date + INTERVAL '1 day')`
-        );
+        conditions.push(`
+          h.created_at < ($${values.length}::date + INTERVAL '1 day')
+        `);
       }
     }
 
-    const whereClause = conditions.length
+    const householdWhere = conditions.length
       ? `WHERE ${conditions.join(' AND ')}`
       : '';
 
-    /* =========================
-       TOTAL HOUSEHOLDS
-    ========================= */
+    const householdJoinConditions = conditions.length
+      ? `AND ${conditions.join(' AND ')}`
+      : '';
+
+    // -------------------------------------------------------
+    // TOTAL HOUSEHOLDS
+    // -------------------------------------------------------
 
     const totalResult = await query(
       `
-      SELECT COUNT(*) AS total
-      FROM households
-      ${whereClause}
+      SELECT COUNT(*)::int AS total
+      FROM households h
+      ${householdWhere}
       `,
       values
     );
 
+    const totalRows = Array.isArray(totalResult)
+      ? totalResult
+      : totalResult?.rows || [];
+
     const total_households = Number(
-      totalResult.rows[0]?.total || 0
+      totalRows[0]?.total || 0
     );
 
-    /* =========================
-       BY PUROK
-    ========================= */
+    // -------------------------------------------------------
+    // HOUSEHOLDS BY PUROK
+    // -------------------------------------------------------
 
     const purokResult = await query(
       `
       SELECT
-        purok,
-        COUNT(*) AS n
-      FROM households
-      ${whereClause}
-      GROUP BY purok
-      ORDER BY purok
+        COALESCE(
+          NULLIF(TRIM(h.purok::text), ''),
+          'Unknown'
+        ) AS purok,
+        COUNT(*)::int AS n
+      FROM households h
+      ${householdWhere}
+      GROUP BY h.purok
+      ORDER BY h.purok
       `,
       values
     );
 
-    const by_purok = purokResult.rows.map((row) => ({
+    const purokRows = Array.isArray(purokResult)
+      ? purokResult
+      : purokResult?.rows || [];
+
+    const by_purok = purokRows.map((row) => ({
       purok: row.purok,
       n: Number(row.n),
     }));
 
-    /* =========================
-       VULNERABILITY
-    ========================= */
+    // -------------------------------------------------------
+    // HOUSEHOLDS BY VULNERABILITY
+    // -------------------------------------------------------
 
     const vulnerabilityResult = await query(
       `
       SELECT
-        COALESCE(vulnerability, 'Unclassified') AS vulnerability,
-        COUNT(*) AS n
-      FROM households
-      ${whereClause}
-      GROUP BY vulnerability
+        COALESCE(
+          NULLIF(TRIM(h.vulnerability), ''),
+          'Unclassified'
+        ) AS vulnerability,
+        COUNT(*)::int AS n
+      FROM households h
+      ${householdWhere}
+      GROUP BY h.vulnerability
       ORDER BY n DESC
       `,
       values
     );
 
-    const by_vulnerability = vulnerabilityResult.rows.map((row) => ({
+    const vulnerabilityRows = Array.isArray(vulnerabilityResult)
+      ? vulnerabilityResult
+      : vulnerabilityResult?.rows || [];
+
+    const by_vulnerability = vulnerabilityRows.map((row) => ({
       vulnerability: row.vulnerability,
       n: Number(row.n),
     }));
 
-    res.json({
-      analytics: {
-        total_households,
-        by_purok,
-        by_vulnerability,
-        validation_records: [],
-        distribution: [],
-        approved_household_count: 0,
-        rejected_count: 0,
-        decided_household_count: 0,
-        approval_rate: 0,
-        coverage: 0,
-        highly_vulnerable: by_vulnerability
-          .filter((row) =>
-            String(row.vulnerability)
-              .toLowerCase()
-              .includes('high')
+    // -------------------------------------------------------
+    // APPROVED HOUSEHOLDS PER PROGRAM
+    // -------------------------------------------------------
+
+    const distributionResult = await query(
+      `
+      SELECT
+        p.program_id,
+        p.program_name,
+
+        COUNT(DISTINCT h.household_id)::int
+          AS approved_households
+
+      FROM assistance_programs p
+
+      LEFT JOIN beneficiary_validation bv
+        ON bv.program_id = p.program_id
+        AND LOWER(
+          TRIM(COALESCE(bv.validation_status, ''))
+        ) = 'approved'
+
+      LEFT JOIN households h
+        ON h.household_id = bv.household_id
+        ${householdJoinConditions}
+
+      GROUP BY
+        p.program_id,
+        p.program_name
+
+      ORDER BY
+        approved_households DESC,
+        p.program_name
+      `,
+      values
+    );
+
+    const distributionRows = Array.isArray(distributionResult)
+      ? distributionResult
+      : distributionResult?.rows || [];
+
+    const distribution = distributionRows.map((row) => ({
+      program_id: row.program_id,
+      program_name: row.program_name,
+      approved_households: Number(
+        row.approved_households || 0
+      ),
+    }));
+
+    // -------------------------------------------------------
+    // TOTAL DISTINCT APPROVED HOUSEHOLDS
+    // -------------------------------------------------------
+
+    const approvedResult = await query(
+      `
+      SELECT
+        COUNT(DISTINCT h.household_id)::int AS total
+      FROM beneficiary_validation bv
+      INNER JOIN households h
+        ON h.household_id = bv.household_id
+      WHERE LOWER(
+        TRIM(COALESCE(bv.validation_status, ''))
+      ) = 'approved'
+      ${conditions.length
+        ? `AND ${conditions.join(' AND ')}`
+        : ''
+      }
+      `,
+      values
+    );
+
+    const approvedRows = Array.isArray(approvedResult)
+      ? approvedResult
+      : approvedResult?.rows || [];
+
+    const approved_household_count = Number(
+      approvedRows[0]?.total || 0
+    );
+
+    // -------------------------------------------------------
+    // HIGHLY VULNERABLE
+    // -------------------------------------------------------
+
+    const highly_vulnerable = by_vulnerability
+      .filter((row) =>
+        String(row.vulnerability)
+          .toLowerCase()
+          .includes('high')
+      )
+      .reduce((sum, row) => sum + row.n, 0);
+
+    // -------------------------------------------------------
+    // RESPONSE
+    // -------------------------------------------------------
+
+    const analytics = {
+      total_households,
+
+      by_purok,
+
+      by_vulnerability,
+
+      distribution,
+
+      approved_household_count,
+
+      highly_vulnerable,
+
+      validation_records: [],
+
+      rejected_count: 0,
+
+      decided_household_count: approved_household_count,
+
+      approval_rate: total_households > 0
+        ? Number(
+            (
+              approved_household_count /
+              total_households *
+              100
+            ).toFixed(2)
           )
-          .reduce((sum, row) => sum + row.n, 0),
-      },
+        : 0,
+
+      coverage: total_households > 0
+        ? Number(
+            (
+              approved_household_count /
+              total_households *
+              100
+            ).toFixed(2)
+          )
+        : 0,
+    };
+
+    res.json({
+      ...analytics,
+      analytics,
     });
+
   } catch (error) {
-    console.error('Analytics error:', error);
+    console.error(
+      'Analytics error:',
+      error
+    );
 
     res.status(500).json({
       message: 'Failed to generate analytics.',
+      error: error.message,
     });
   }
 });

@@ -24,7 +24,7 @@ import {
 const TYPES = [
   ['households', 'Household Profile Report'],
   ['approved', 'Approved Beneficiaries Report'],
-  ['distribution', 'Assistance Distribution Report'],
+  ['incomplete', 'Incomplete Assistance Information Report'],
   ['analytics', 'Analytical Summary'],
 ];
 
@@ -71,7 +71,6 @@ function getReportLabel(type) {
 function getRecordKey(row, index) {
   const base =
     row?.validation_id ||
-    row?.distribution_id ||
     row?.household_id ||
     row?.report_id ||
     row?.id ||
@@ -173,6 +172,97 @@ function rowsToCsv(rows) {
     .join('\n');
 }
 
+function isHighOrMediumVulnerability(row) {
+  const value = String(
+    row?.vulnerability ||
+    row?.classification ||
+    row?.vulnerability_level ||
+    ''
+  ).trim().toLowerCase();
+
+  return [
+    'high',
+    'medium',
+    'highly vulnerable',
+    'moderately vulnerable',
+    'high vulnerability',
+    'moderate vulnerability',
+  ].includes(value);
+}
+
+function hasIncomeProof(row) {
+  const proofs = row?.income_proof_images;
+
+  if (Array.isArray(proofs)) {
+    return proofs.some(
+      (proof) => String(proof || '').trim() !== ''
+    );
+  }
+
+  if (typeof proofs === 'string') {
+    const value = proofs.trim();
+
+    if (!value || value === '[]' || value === 'null') {
+      return false;
+    }
+
+    try {
+      const parsed = JSON.parse(value);
+
+      if (Array.isArray(parsed)) {
+        return parsed.some(
+          (proof) => String(proof || '').trim() !== ''
+        );
+      }
+    } catch {
+      // A non-empty storage path is also valid.
+    }
+
+    return true;
+  }
+
+  return false;
+}
+
+function hasSuggestedProgram(row) {
+  const programs = row?.suggested_programs;
+
+  if (Array.isArray(programs)) {
+    return programs.some(
+      (program) => String(program || '').trim() !== ''
+    );
+  }
+
+  if (typeof programs === 'string') {
+    const value = programs.trim();
+
+    if (!value || value === '{}' || value === '[]') {
+      return false;
+    }
+
+    try {
+      const parsed = JSON.parse(value);
+
+      if (Array.isArray(parsed)) {
+        return parsed.length > 0;
+      }
+    } catch {
+      // Continue checking a non-JSON string.
+    }
+
+    return true;
+  }
+
+  return false;
+}
+
+function isIncompleteAssistanceInformation(row) {
+  return (
+    isHighOrMediumVulnerability(row) &&
+    !hasIncomeProof(row) &&
+    !hasSuggestedProgram(row)
+  );
+}
 /* ======================================================
    DATE HELPERS
    ====================================================== */
@@ -184,8 +274,6 @@ function getRecordDate(row) {
     row?.released_at ||
     row?.releaseDate ||
     row?.distributed_at ||
-    row?.distribution_date ||
-    row?.distributionDate ||
     row?.report_date ||
     row?.created_at ||
     null
@@ -209,30 +297,6 @@ function reportCell(value) {
   return String(value);
 }
 
-function getDistributionStatus(row) {
-  const status = String(row?.release_status || '')
-    .trim()
-    .toLowerCase();
-
-  return status === 'released'
-    ? 'Released'
-    : 'Not Released';
-}
-
-function getDistributionPeriod(row) {
-  const start = row?.period_start;
-  const end = row?.period_end;
-
-  if (!start || !end) {
-    return '—';
-  }
-
-  // Preserve the exact YYYY-MM-DD values from the database.
-  const startDate = String(start).slice(0, 10);
-  const endDate = String(end).slice(0, 10);
-
-  return `${startDate} to ${endDate}`;
-}
 
 function getReportColumns(reportType) {
   const column = (header, keys, formatter = reportCell) => ({
@@ -310,9 +374,9 @@ if (reportType === 'households') {
     ];
   }
 
-  if (reportType === 'distribution') {
+  if (reportType === 'incomplete') {
   return [
-    column('Household', [
+    column('Household Head', [
       'household_head_name',
       'household_name',
       'head_name',
@@ -323,20 +387,17 @@ if (reportType === 'households') {
       'purok_number',
       'purok_name',
     ]),
-    column('Assistance Program', [
-      'program_name',
-      'assistance_program',
-      'program',
-      'program_title',
+    column('Vulnerability', [
+      'vulnerability',
+      'classification',
+      'vulnerability_level',
     ]),
-    column('Amount Released', [
-      'amount_released',
+    column('Monthly Income', [
+      'household_monthly_income',
+      'monthly_income',
+      'income',
     ], (value) => {
-      if (
-        value === null ||
-        value === undefined ||
-        value === ''
-      ) {
+      if (value === null || value === undefined || value === '') {
         return '—';
       }
 
@@ -349,17 +410,22 @@ if (reportType === 'households') {
           })}`
         : String(value);
     }),
-    column('Release Status', [
-      'release_status',
-    ]),
-    column('Distribution Period', [
-      'period_start',
-    ], (_, row) => getDistributionPeriod(row)),
-    column('Release Date', [
-      'release_date',
-    ], formatDate),
+    column('Income Proof', [
+      'income_proof_images',
+    ], (value) => {
+      return Array.isArray(value) && value.length > 0
+        ? 'Uploaded'
+        : value && String(value).trim() !== '' && value !== '[]'
+          ? 'Uploaded'
+          : 'Missing';
+    }),
+    column('Assistance Program', [
+      'suggested_programs',
+    ], () => 'No program detected'),
   ];
 }
+
+
 
   return [
     column('Household', ['household_head_name', 'household_name', 'head_name', 'name']),
@@ -427,7 +493,6 @@ function emptyAnalytics() {
     by_purok: [],
     by_vulnerability: [],
     validation_records: [],
-    distribution: [],
     approved_household_count: 0,
     rejected_count: 0,
     decided_household_count: 0,
@@ -470,7 +535,6 @@ function getAnalyticsData(value) {
     by_purok: arr(value.by_purok),
     by_vulnerability: arr(value.by_vulnerability),
     validation_records: arr(value.validation_records),
-    distribution: arr(value.distribution),
     approved_household_count: num(
       value.approved_household_count
     ),
@@ -505,14 +569,6 @@ function getAnalyticsVulnerabilityRows(analytics) {
   );
 }
 
-function getAnalyticsDistributionRows(analytics) {
-  return getAnalyticsData(analytics).distribution.map(
-    (item) => ({
-      label: item?.program_name || 'Unknown Program',
-      value: Number(item?.released || 0),
-    })
-  );
-}
 
 function getAnalyticsValidationRows(analytics) {
   const data = getAnalyticsData(analytics);
@@ -814,40 +870,6 @@ doc.setFillColor(...barColor);
     8
   );
 }
-function getDistributionPeriodRange(
-  periodType,
-  month,
-  startDate,
-  endDate
-) {
-  if (periodType === 'Monthly Distribution') {
-  if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
-    return {
-      periodStart: '',
-      periodEnd: '',
-    };
-  }
-
-  const [year, monthNumber] = month.split('-').map(Number);
-
-  const lastDay = new Date(
-    year,
-    monthNumber,
-    0
-  ).getDate();
-
-  return {
-    periodStart: `${month}-01`,
-    periodEnd: `${month}-${String(lastDay).padStart(2, '0')}`,
-  };
-}
-
-  return {
-    periodStart: startDate,
-    periodEnd: endDate,
-  };
-} 
-
 
 /* ======================================================
    WEB COMPONENTS
@@ -1034,10 +1056,6 @@ function AnalyticsSummary({
       data
     );
 
-  const distributionRows =
-    getAnalyticsDistributionRows(
-      data
-    );
 
   const validationRows =
     getAnalyticsValidationRows(
@@ -1073,14 +1091,10 @@ function AnalyticsSummary({
         />
 
         <AnalyticsBarChart
-          title="Vulnerability Distribution"
+          title="Households by Vulnerability"
           rows={vulnerabilityRows}
         />
 
-        <AnalyticsBarChart
-          title="Assistance Distribution by Program"
-          rows={distributionRows}
-        />
 
         <AnalyticsBarChart
           title="Validation Outcome"
@@ -1194,9 +1208,6 @@ export default function Reports() {
 
   const [purok, setPurok] =
     useState('All Puroks');
-  const [assistanceProgram, setAssistanceProgram] = useState('');
-  const [assistancePrograms, setAssistancePrograms] = useState([]);
-  const [loadingPrograms, setLoadingPrograms] = useState(false);
 
   const [startDate, setStartDate] =
     useState('');
@@ -1222,12 +1233,6 @@ export default function Reports() {
   const isAnalytics =
     type === 'analytics';
 
-  const [releaseStatus, setReleaseStatus] = useState('All');
-const [distributionPeriodType, setDistributionPeriodType] =
-  useState('Monthly Distribution');
-const [distributionMonth, setDistributionMonth] = useState('');
-const [distributionStartDate, setDistributionStartDate] = useState('');
-const [distributionEndDate, setDistributionEndDate] = useState('');
 
   /* ======================================================
      RESET
@@ -1240,42 +1245,6 @@ const [distributionEndDate, setDistributionEndDate] = useState('');
     setShowPreview(false);
   };
 
-  /* ======================================================
-     FILTERS
-     ====================================================== */
-
-  const getEffectiveFilters = () => {
-  const filters = {
-    dateRange,
-    startDate: dateRange === 'Custom' ? startDate : '',
-    endDate: dateRange === 'Custom' ? endDate : '',
-    purok,
-  };
-
-  if (type === 'distribution') {
-    const period = getDistributionPeriodRange(
-      distributionPeriodType,
-      distributionMonth,
-      distributionStartDate,
-      distributionEndDate
-    );
-
-    return {
-      ...filters,
-      assistanceProgram,
-      releaseStatus,
-      distributionPeriodType,
-      distributionMonth:
-        distributionPeriodType === 'Monthly Distribution'
-          ? distributionMonth
-          : '',
-      periodStart: period.periodStart,
-      periodEnd: period.periodEnd,
-    };
-  }
-
-  return filters;
-};
 
  const buildQuery = () => {
   const params = new URLSearchParams();
@@ -1288,79 +1257,44 @@ const [distributionEndDate, setDistributionEndDate] = useState('');
     params.set('endDate', endDate);
   }
 
-  if (type === 'distribution') {
-    params.set('programId', assistanceProgram);
-    params.set('releaseStatus', releaseStatus);
-
-    const period = getDistributionPeriodRange(
-      distributionPeriodType,
-      distributionMonth,
-      distributionStartDate,
-      distributionEndDate
-    );
-
-    params.set('periodStart', period.periodStart);
-    params.set('periodEnd', period.periodEnd);
-  }
 
   return params.toString();
 };
 
 
+   // Shared filter values used by loading, preview, PDF, and CSV.
+  const getEffectiveFilters = () => ({
+    dateRange,
+    purok,
+    startDate: dateRange === 'Custom' ? startDate : '',
+    endDate: dateRange === 'Custom' ? endDate : '',
+  });
+
   const validateFilters = () => {
-  // Assistance distribution filters.
-  if (type === 'distribution') {
-    if (!assistanceProgram) {
-      toast.error('Please select an assistance program first.');
-      return false;
-    }
+    if (dateRange !== 'Custom') return true;
 
-    if (!['All', 'Released', 'Not Released'].includes(releaseStatus)) {
-      toast.error('Please select a valid release status.');
-      return false;
-    }
-
-    if (distributionPeriodType === 'Monthly Distribution') {
-      if (!distributionMonth) {
-        toast.error('Please select a distribution month.');
-        return false;
-      }
-    } else if (distributionPeriodType === 'Custom Date Range') {
-      if (!distributionStartDate || !distributionEndDate) {
-        toast.error('Please select both distribution start and end dates.');
-        return false;
-      }
-
-      if (distributionStartDate > distributionEndDate) {
-        toast.error(
-          'The distribution end date cannot be before the start date.'
-        );
-        return false;
-      }
-    } else {
-      toast.error('Please select a valid distribution period type.');
-      return false;
-    }
-  }
-
-  // Existing report date filter validation.
-  if (dateRange === 'Custom') {
     if (!startDate || !endDate) {
-      toast.error(
-        'Please select both start and end dates for the custom date range.'
-      );
+      toast.error('Please select both a start date and an end date.');
       return false;
     }
 
-    if (startDate > endDate) {
+    const start = new Date(`${startDate}T00:00:00`);
+    const end = new Date(`${endDate}T00:00:00`);
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      toast.error('Please enter valid custom dates.');
+      return false;
+    }
+
+    if (start > end) {
       toast.error('Start date cannot be later than end date.');
       return false;
     }
-  }
 
-  return true;
-};
-  /* ======================================================
+    return true;
+  };
+
+ /* ======================================================
      REPORT HISTORY
      ====================================================== */
 
@@ -1368,18 +1302,28 @@ const [distributionEndDate, setDistributionEndDate] = useState('');
     try {
       setLoading(true);
 
-      const data =
-        await api.get('/reports');
+      const response = await api.get('/reports');
+      let payload = response?.data ?? response;
 
-      setReports(
-        Array.isArray(
-          data?.reports
-        )
-          ? data.reports
-          : Array.isArray(data)
-            ? data
-            : []
-      );
+      // Accept direct arrays and common API response wrappers.
+      for (let i = 0; i < 3; i += 1) {
+        if (Array.isArray(payload)) break;
+        if (Array.isArray(payload?.reports)) {
+          payload = payload.reports;
+          break;
+        }
+        if (payload?.data !== undefined) {
+          payload = payload.data;
+          continue;
+        }
+        if (payload?.result !== undefined) {
+          payload = payload.result;
+          continue;
+        }
+        break;
+      }
+
+      setReports(Array.isArray(payload) ? payload : []);
     } catch (error) {
       console.error(
         'Failed to load report history:',
@@ -1476,11 +1420,34 @@ const loadRecords = async () => {
     // NORMAL REPORTS
     setAnalyticsData(null);
 
-    const response = await api.get(
-      `/reports/data/${type}?${queryString}`
-    );
+    const reportEndpoint =
+  type === 'incomplete'
+    ? 'households'
+    : type;
 
-    const payload = response?.data ?? response;
+const response = await api.get(
+  `/reports/data/${reportEndpoint}?${queryString}`
+);
+
+    let payload = response?.data ?? response;
+
+    // Accept rows wrapped by data, result, or report properties.
+    for (let i = 0; i < 4; i += 1) {
+      if (Array.isArray(payload) || Array.isArray(payload?.rows)) break;
+      if (payload?.data !== undefined) {
+        payload = payload.data;
+        continue;
+      }
+      if (payload?.result !== undefined) {
+        payload = payload.result;
+        continue;
+      }
+      if (payload?.report !== undefined) {
+        payload = payload.report;
+        continue;
+      }
+      break;
+    }
 
     const rows = Array.isArray(payload?.rows)
       ? payload.rows
@@ -1491,16 +1458,21 @@ const loadRecords = async () => {
     console.log('REPORT RESPONSE:', response);
     console.log('LOADED REPORT ROWS:', rows);
 
-    setRecords(rows);
+  const finalRows =
+  type === 'incomplete'
+    ? rows.filter(isIncompleteAssistanceInformation)
+    : rows;
 
-    if (rows.length === 0) {
+setRecords(finalRows);
+
+    if (finalRows.length === 0) {
       toast.error(
-        'No records found for the selected filters.'
+        type === 'incomplete'
+          ? 'No households matched the incomplete assistance information criteria.'
+          : 'No records found for the selected filters.'
       );
     } else {
-      toast.success(
-        `${rows.length} record(s) loaded successfully.`
-      );
+      toast.success(`${finalRows.length} record(s) loaded successfully.`);
     }
   } catch (error) {
     console.error('LOAD REPORT ERROR:', error);
@@ -1521,42 +1493,6 @@ const loadRecords = async () => {
 };
 
 
-const loadAssistancePrograms = async () => {
-  try {
-    setLoadingPrograms(true);
-
-    const response = await api.get(
-      '/reports/assistance-programs'
-    );
-
-    const programs =
-      response?.programs ??
-      response?.data?.programs ??
-      response?.data ??
-      [];
-
-    setAssistancePrograms(
-      Array.isArray(programs) ? programs : []
-    );
-  } catch (error) {
-    console.error(
-      'Failed to load assistance programs:',
-      error
-    );
-
-    setAssistancePrograms([]);
-    toast.error('Failed to load assistance programs.');
-  } finally {
-    setLoadingPrograms(false);
-  }
-};
-
-
-useEffect(() => {
-  if (type === 'distribution') {
-    loadAssistancePrograms();
-  }
-}, [type]);
 
 
   /* ======================================================
@@ -2048,40 +1984,6 @@ useEffect(() => {
           );
         }
 
-        // DISTRIBUTION REPORT FILTER DETAILS
-if (reportType === 'distribution') {
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(...GRAY);
-
-  const selectedProgram = assistancePrograms.find(
-    (program) =>
-      String(program.program_id ?? program.id) ===
-      String(filters.assistanceProgram)
-  );
-
-  const programName =
-    selectedProgram?.program_name ||
-    selectedProgram?.name ||
-    selectedProgram?.title ||
-    'Selected Program';
-
-  const distributionDetails = [
-    `Assistance Program: ${programName}`,
-    `Release Status: ${filters.releaseStatus || 'All'}`,
-    `Distribution Period: ${
-      filters.periodStart || '—'
-    } to ${
-      filters.periodEnd || '—'
-    }`,
-  ];
-
-  distributionDetails.forEach((detail, index) => {
-    doc.text(detail, margin, currentY + index * 5);
-  });
-
-  currentY += 20;
-}
 
         /* ==================================================
            ANALYTICS PDF
@@ -2176,18 +2078,11 @@ const charts = [
     sort: false,
   },
   {
-    title: 'Vulnerability Distribution',
+    title: 'Households by Vulnerability',
     rows: getAnalyticsVulnerabilityRows(data),
     color: VULNERABILITY_COLORS,
     colorMode: 'category',
     height: 65,
-  },
-  {
-    title: 'Assistance Distribution by Program',
-    rows: getAnalyticsDistributionRows(data),
-    color: CHART_COLORS,
-    colorMode: 'individual',
-    height: 70,
   },
   {
     title: 'Validation Outcome',
@@ -2717,7 +2612,7 @@ try {
         ),
 
         ...section(
-          'VULNERABILITY DISTRIBUTION',
+          'HOUSEHOLDS BY VULNERABILITY',
           [
             'Classification',
             'Households',
@@ -2727,16 +2622,6 @@ try {
           )
         ),
 
-        ...section(
-          'ASSISTANCE DISTRIBUTION',
-          [
-            'Program',
-            'Released',
-          ],
-          getAnalyticsDistributionRows(
-            data
-          )
-        ),
 
         ...section(
           'VALIDATION OUTCOME',
@@ -2954,8 +2839,9 @@ try {
      RENDER
      ====================================================== */
 
-  const previewFilters =
-    getEffectiveFilters();
+  
+
+  const previewFilters = getEffectiveFilters();
 
   const viewingFilters =
     viewingReport
@@ -2998,7 +2884,6 @@ try {
             value={type}
             onChange={(event) => {
   setType(event.target.value);
-  setAssistanceProgram('');
   resetLoaded();
 }}
           >
@@ -3094,113 +2979,6 @@ try {
               )
             )}
           </Select>
-          {type === 'distribution' && (
-  <Select
-    label="ASSISTANCE PROGRAM"
-    value={assistanceProgram}
-    onChange={(event) => {
-      setAssistanceProgram(event.target.value);
-      resetLoaded();
-    }}
-  >
-    <option value="">
-      {loadingPrograms
-        ? 'Loading programs...'
-        : 'Select an assistance program'}
-    </option>
-
-    {assistancePrograms.map((program) => {
-      const id =
-        program.program_id ??
-        program.id;
-
-      const name =
-        program.program_name ??
-        program.name ??
-        program.title;
-
-      if (id == null || !name) return null;
-
-      return (
-        <option key={id} value={String(id)}>
-          {name}
-        </option>
-      );
-    })}
-  </Select>
-)}
-
-
-{type === 'distribution' && (
-  <>
-    <Select
-      label="RELEASE STATUS"
-      value={releaseStatus}
-      onChange={(event) => {
-        setReleaseStatus(event.target.value);
-        resetLoaded();
-      }}
-    >
-      <option value="All">All</option>
-      <option value="Released">Released</option>
-      <option value="Not Released">Not Released</option>
-    </Select>
-
-    <Select
-      label="DISTRIBUTION PERIOD TYPE"
-      value={distributionPeriodType}
-      onChange={(event) => {
-        setDistributionPeriodType(event.target.value);
-        setDistributionMonth('');
-        setDistributionStartDate('');
-        setDistributionEndDate('');
-        resetLoaded();
-      }}
-    >
-      <option value="Monthly Distribution">
-        Monthly Distribution
-      </option>
-      <option value="Custom Date Range">
-        Custom Date Range
-      </option>
-    </Select>
-
-    {distributionPeriodType === 'Monthly Distribution' ? (
-      <Input
-        label="DISTRIBUTION MONTH"
-        type="month"
-        value={distributionMonth}
-        onChange={(event) => {
-          setDistributionMonth(event.target.value);
-          resetLoaded();
-        }}
-      />
-    ) : (
-      <>
-        <Input
-          label="DISTRIBUTION START DATE"
-          type="date"
-          value={distributionStartDate}
-          onChange={(event) => {
-            setDistributionStartDate(event.target.value);
-            resetLoaded();
-          }}
-        />
-
-        <Input
-          label="DISTRIBUTION END DATE"
-          type="date"
-          value={distributionEndDate}
-          min={distributionStartDate || undefined}
-          onChange={(event) => {
-            setDistributionEndDate(event.target.value);
-            resetLoaded();
-          }}
-        />
-      </>
-    )}
-  </>
-)}
 
           <div className="flex justify-start">
             <Button
@@ -3356,13 +3134,13 @@ try {
   'Select',
   'Household',
   'Purok',
-  ...(type === 'distribution'
-    ? [
-        'Assistance Program',
-        'Amount / Quantity',
-        'Release Status',
-        'Distribution Period',
-      ]
+  ...(type === 'incomplete'
+      ? [
+          'Vulnerability',
+          'Monthly Income',
+          'Income Proof',
+          'Assistance Program',
+        ]
     : [
         'Classification',
         'Status',
@@ -3441,27 +3219,26 @@ try {
                             )}
                           </td>
 
-                          {type === 'distribution' ? (
+                          {type === 'incomplete' ? (
   <>
     <td className="px-4 py-3 text-xl font-semibold">
-      {row.program_name || '—'}
+      {getClassification(row) || '—'}
     </td>
 
     <td className="px-4 py-3 text-xl font-semibold">
-      {row.amount_released != null
-        ? `₱ ${Number(row.amount_released).toLocaleString('en-PH', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}`
-        : '—'}
+      {row.household_monthly_income != null
+        ? `₱ ${Number(row.household_monthly_income).toLocaleString('en-PH')}`
+        : row.monthly_income != null
+          ? `₱ ${Number(row.monthly_income).toLocaleString('en-PH')}`
+          : '—'}
+    </td>
+
+    <td className="px-4 py-3">
+      <Badge tone="red">Missing</Badge>
     </td>
 
     <td className="px-4 py-3 text-xl font-semibold">
-      {getDistributionStatus(row)}
-    </td>
-
-    <td className="px-4 py-3 text-xl font-semibold">
-      {getDistributionPeriod(row)}
+      No program detected
     </td>
   </>
 ) : (
@@ -3825,38 +3602,6 @@ try {
                       </p>
                     </div>
 
-                    {viewingReport.report_type === 'distribution' && (
-  <>
-    <div>
-      <p className="text-xl font-bold text-gray-500">
-        RELEASE STATUS
-      </p>
-      <p className="text-lg font-semibold">
-        {viewingFilters.releaseStatus || 'All'}
-      </p>
-    </div>
-
-    <div>
-      <p className="text-xl font-bold text-gray-500">
-        DISTRIBUTION PERIOD TYPE
-      </p>
-      <p className="text-lg font-semibold">
-        {viewingFilters.distributionPeriodType || '—'}
-      </p>
-    </div>
-
-    <div>
-      <p className="text-xl font-bold text-gray-500">
-        DISTRIBUTION PERIOD
-      </p>
-      <p className="text-lg font-semibold">
-        {viewingFilters.periodStart && viewingFilters.periodEnd
-          ? `${formatDate(viewingFilters.periodStart)} to ${formatDate(viewingFilters.periodEnd)}`
-          : '—'}
-      </p>
-    </div>
-  </>
-)}
                   </div>
                 </div>
               )}

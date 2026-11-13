@@ -444,40 +444,44 @@ export default function Analytics() {
      DISTRIBUTION
   ======================================================= */
 
-  const normalizedDistribution =
-    useMemo(() => {
-      if (!Array.isArray(distribution)) {
-        return [];
-      }
+ /* =========================================================
+   APPROVED HOUSEHOLDS PER PROGRAM
+========================================================= */
 
-      return distribution.map((item) => ({
-        ...item,
+const normalizedDistribution = useMemo(() => {
+  if (!Array.isArray(distribution)) {
+    return [];
+  }
 
-        program_name:
-          item?.program_name ||
-          item?.program ||
-          item?.name ||
-          'Unknown Program',
+  return distribution.map((item) => ({
+    ...item,
 
-        released:
-          Number(
-            item?.released ??
-            item?.count ??
-            item?.total ??
-            0
-          ) || 0,
-      }));
-    }, [distribution]);
+    program_name:
+      item?.program_name ||
+      item?.program ||
+      item?.name ||
+      'Unknown Program',
 
-  const maxDist =
-    normalizedDistribution.length > 0
-      ? Math.max(
-          ...normalizedDistribution.map(
-            (item) =>
-              Number(item?.released) || 0
-          )
+    approved_households:
+      Number(
+        item?.approved_households ??
+        item?.approved_count ??
+        item?.count ??
+        item?.total ??
+        0
+      ) || 0,
+  }));
+}, [distribution]);
+
+const maxDist =
+  normalizedDistribution.length > 0
+    ? Math.max(
+        ...normalizedDistribution.map(
+          (item) =>
+            Number(item?.approved_households) || 0
         )
-      : 1;
+      )
+    : 1;
 
   /* =======================================================
      ERROR
@@ -674,44 +678,33 @@ export default function Analytics() {
           "
         >
           <h3 className="text-2xl font-bold text-ink">
-            Assistance Distribution by Program
+            Approved Households by Program
           </h3>
 
           <div className="mt-4">
 
-            {normalizedDistribution.map(
-              (item, index) => (
-                <ListBar
-                  key={
-                    item?.program_id ||
-                    item?.program_name ||
-                    `program-${index}`
-                  }
-                  label={
-                    item?.program_name ||
-                    'Unknown Program'
-                  }
-                  value={
-                    Number(
-                      item?.released
-                    ) || 0
-                  }
-                  color={
-                    Number(
-                      item?.released
-                    ) === maxDist
-                      ? '#db0023'
-                      : '#c09a00'
-                  }
-                />
-              )
-            )}
+            {normalizedDistribution.map((item, index) => (
+  <ListBar
+    key={
+      item?.program_id ||
+      item?.program_name ||
+      `program-${index}`
+    }
+    label={item.program_name}
+    value={item.approved_households}
+    color={
+      item.approved_households === maxDist
+        ? '#db0023'
+        : '#c09a00'
+    }
+  />
+))}
 
-            {!normalizedDistribution.length && (
-              <p className="text-sm text-gray-400">
-                No assistance distributed yet.
-              </p>
-            )}
+{!normalizedDistribution.length && (
+  <p className="text-sm text-gray-400">
+    No approved households found for any program.
+  </p>
+)}
 
           </div>
         </div>

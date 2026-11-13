@@ -13,22 +13,16 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import {useNavigate} from 'react-router-dom';
 
-import { useAuth } from '../context/AuthContext';
 
 function History() {
-  const { user } = useAuth();
   const [history, setHistory] = useState([]);
-  const [releases, setReleases] = useState([]);
-  const [releaseError, setReleaseError] = useState('');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [expandedHousehold, setExpandedHousehold] = useState(null);
   const [selectedHousehold, setSelectedHousehold] = useState(null);
   const [error, setError] = useState('');
-  const navigate = useNavigate();
  
 
 
@@ -44,13 +38,10 @@ function History() {
   try {
     setLoading(true);
     setError('');
-    setReleaseError('');
 
-    const [historyResponse, releaseResponse] =
-      await Promise.all([
-        api.get('/history/beneficiary-validation'),
-        api.get('/history/household-releases'),
-      ]);
+    const historyResponse = await api.get(
+      '/history/beneficiary-validation'
+    );
 
     const historyRecords = Array.isArray(historyResponse)
       ? historyResponse
@@ -60,18 +51,10 @@ function History() {
           ? historyResponse.rows
           : [];
 
-    const releaseRecords = Array.isArray(releaseResponse)
-      ? releaseResponse
-      : Array.isArray(releaseResponse?.data)
-        ? releaseResponse.data
-        : Array.isArray(releaseResponse?.rows)
-          ? releaseResponse.rows
-          : [];
-
     setHistory(historyRecords);
-    setReleases(releaseRecords);
   } catch (err) {
-    console.error('Failed to load history or releases:', err);
+    console.error('Failed to load history:', err);
+
     setError(
       err?.message || 'Failed to load beneficiary history.'
     );
@@ -142,33 +125,7 @@ function History() {
     return Object.values(groups);
   }, [filteredHistory]);
 
-  const householdReleaseSummary = useMemo(() => {
-  const summary = {};
 
-  releases.forEach((release) => {
-    const id = release.household_id;
-    if (!id) return;
-
-    if (!summary[id]) {
-      summary[id] = {
-        timesReceived: 0,
-        totalAmount: 0,
-        records: [],
-      };
-    }
-
-    const amount = Number(release.amount_released);
-
-    summary[id].timesReceived += 1;
-    summary[id].totalAmount += Number.isFinite(amount)
-      ? amount
-      : 0;
-
-    summary[id].records.push(release);
-  });
-
-  return summary;
-}, [releases]);
 
 const formatCurrency = (amount) =>
   new Intl.NumberFormat('en-PH', {
@@ -286,7 +243,7 @@ const getDecisionMaker = (program) => {
 
         </div>
 
-        {user?.roles?.toLowerCase() === 'staff' && (
+        {false && user?.roles?.toLowerCase() === 'staff' && (
   <button
     type="button"
     onClick={() => navigate('/distribution-program')}
@@ -468,12 +425,7 @@ const getDecisionMaker = (program) => {
               const isExpanded =
                 expandedHousehold === household.household_id;
 
-              const releaseSummary =
-              householdReleaseSummary[household.household_id] || {
-                timesReceived: 0,
-                totalAmount: 0,
-                records: [],
-              };
+          
 
               return (
                 <div key={household.household_id}>
@@ -486,25 +438,7 @@ const getDecisionMaker = (program) => {
                       <div className="rounded-full bg-[#F4E3E5] p-3 text-[#6E2430]">
                         <Users size={30} />
                       </div>
-                      <div className="mt-3 grid grid-cols-3 gap-3 sm:grid-cols-2">
-  <div className="rounded-lg border border-green-200 bg-green-50 p-3">
-    <p className="text-lg font-medium text-green-800">
-       Assistance Received
-    </p>
-    <p className="mt-1 text-2xl font-bold text-green-900">
-      {releaseSummary.timesReceived}
-    </p>
-  </div>
-
-  <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
-    <p className="text-lg font-medium text-blue-800">
-      Total Amount Received
-    </p>
-    <p className="mt-1 text-2xl font-bold text-blue-900">
-      {formatCurrency(releaseSummary.totalAmount)}
-    </p>
-  </div>
-</div>
+                    
 
                       <div>
                         <h3 className="text-2xl font-bold text-gray-800">
@@ -580,71 +514,7 @@ const getDecisionMaker = (program) => {
                   {isExpanded && (
                     <div className="border-t border-gray-100 bg-gray-50 px-5 py-4">
 
-                      <div className="mb-5 rounded-xl border border-gray-200 bg-white p-4">
-  <h3 className="mb-3 text-2xl font-bold text-[#6E2430]">
-    Actual Assistance Received
-  </h3>
-
-  <p className="mb-4 text-xl text-gray-600">
-    Total releases: {releaseSummary.timesReceived}
-    {' · '}
-    Total amount: {formatCurrency(releaseSummary.totalAmount)}
-  </p>
-
-  {releaseSummary.records.length === 0 ? (
-    <p className="text-gray-500">
-      No released assistance has been recorded for this household.
-    </p>
-  ) : (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[700px] text-left">
-        <thead>
-          <tr className="border-b text-xl text-gray-500">
-            <th className="px-3 py-3">Program</th>
-            <th className="px-3 py-3">Amount Received</th>
-            <th className="px-3 py-3">Release Date</th>
-            <th className="px-3 py-3">Covered Period</th>
-          </tr>
-        </thead>
-
-        <tbody className=" text-xl">
-          {releaseSummary.records.map((release) => (
-            <tr
-              key={release.distribution_id}
-              className="border-b last:border-0"
-            >
-              <td className="px-3 py-3 font-medium">
-                {release.program_name || '—'}
-              </td>
-
-              <td className="px-3 py-3 font-semibold text-green-700">
-                {formatCurrency(release.amount_released)}
-              </td>
-
-              <td className="px-3 py-3">
-                {release.release_date
-                  ? new Date(
-                      `${String(release.release_date).slice(0, 10)}T00:00:00`
-                    ).toLocaleDateString('en-PH', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                    })
-                  : '—'}
-              </td>
-
-              <td className="px-3 py-3">
-                {release.period_start && release.period_end
-                  ? `${String(release.period_start).slice(0, 10)} to ${String(release.period_end).slice(0, 10)}`
-                  : 'Not specified'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )}
-</div>
+                  
 
                       <div className="overflow-x-auto">
                         <table className="w-full min-w-[950px] text-left">
