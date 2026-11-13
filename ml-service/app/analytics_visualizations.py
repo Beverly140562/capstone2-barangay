@@ -50,7 +50,7 @@ def create_vulnerability_chart(records):
 
     if not counts:
         svg += '''
-        <text x="300" y="250" text-anchor="middle"
+        <text x="400" y="250" text-anchor="middle"
               font-family="Arial" font-size="18">
             No data available
         </text>
