@@ -171,6 +171,7 @@ router.get('/summary', async (req, res) => {
 | GET APPROVED HOUSEHOLDS PER ASSISTANCE PROGRAM
 |--------------------------------------------------------------------------
 */
+
 router.get('/distribution', async (req, res) => {
   try {
     const result = await query(`
@@ -187,7 +188,7 @@ router.get('/distribution', async (req, res) => {
         p.program_name
       ORDER BY
         approved_households DESC,
-        p.program_name
+        p.program_name ASC
     `);
 
     const rows = Array.isArray(result)
@@ -195,20 +196,21 @@ router.get('/distribution', async (req, res) => {
       : result?.rows || [];
 
     res.json({
-      distribution: rows,
+      distribution: rows.map((row) => ({
+        program_id: row.program_id,
+        program_name: row.program_name,
+        approved_households: Number(row.approved_households || 0),
+      })),
     });
-
   } catch (error) {
-    console.error(
-      'GET /api/analytics/distribution error:',
-      error
-    );
+    console.error('GET /analytics/distribution error:', error);
 
     res.status(500).json({
       error: error.message,
     });
   }
 });
+
 
 /*
 |--------------------------------------------------------------------------

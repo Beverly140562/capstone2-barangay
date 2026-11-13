@@ -15,6 +15,7 @@ import {
 } from 'recharts';
 
 import { mlApi } from '../lib/mlApi';
+import { api } from '../lib/api';
 
 /* =========================================================
    COLORS
@@ -249,119 +250,89 @@ export default function Analytics() {
      LOAD ANALYTICS
   ======================================================= */
 
-  useEffect(() => {
-    let cancelled = false;
+  
+useEffect(() => {
+  let cancelled = false;
 
-    async function loadData() {
-      try {
-        setError('');
+  async function loadData() {
+    try {
+      setError('');
 
-        const response = await mlApi.getAnalytics();
+      // Fetch dashboard analytics and approved program counts
+      // directly from the Express backend.
+      const [analyticsResponse, distributionResponse] =
+        await Promise.all([
+          api.get('/analytics/analytics'),
+          api.get('/analytics/distribution'),
+        ]);
 
-        if (cancelled) {
-          return;
-        }
+      if (cancelled) return;
 
-        /*
-         * Supports either:
-         *
-         * {
-         *   total_households: 32,
-         *   beneficiary_validation: [],
-         *   distribution: []
-         * }
-         *
-         * OR:
-         *
-         * {
-         *   data: {
-         *     total_households: 32,
-         *     beneficiary_validation: [],
-         *     distribution: []
-         *   }
-         * }
-         */
+      // Support both Axios responses and direct response objects.
+      const data =
+        analyticsResponse?.data &&
+        typeof analyticsResponse.data === 'object'
+          ? analyticsResponse.data
+          : analyticsResponse || {};
 
-        const data =
-          response?.data &&
-          typeof response.data === 'object' &&
-          !Array.isArray(response.data)
-            ? response.data
-            : response || {};
+      const distributionData =
+        distributionResponse?.data &&
+        typeof distributionResponse.data === 'object'
+          ? distributionResponse.data
+          : distributionResponse || {};
 
-        console.log(
-          'Analytics API response:',
-          response
-        );
+      console.log('Express analytics:', data);
+      console.log('Approved program distribution:', distributionData);
 
-        console.log(
-          'Analytics normalized data:',
-          data
-        );
+      const records = Array.isArray(data?.beneficiary_validation)
+        ? data.beneficiary_validation
+        : Array.isArray(data?.validations)
+          ? data.validations
+          : Array.isArray(data?.validation_records)
+            ? data.validation_records
+            : [];
 
-        const records = Array.isArray(data?.beneficiary_validation)
-  ? data.beneficiary_validation
-  : Array.isArray(data?.validations)
-    ? data.validations
-    : [];
+      const distributions = Array.isArray(
+        distributionData?.distribution
+      )
+        ? distributionData.distribution
+        : [];
 
-        const distributions = Array.isArray(
-          data?.distribution
-        )
-          ? data.distribution
-          : [];
+      setSummary({
+        ...data,
+        by_purok: Array.isArray(data?.by_purok)
+          ? data.by_purok
+          : [],
+        by_vulnerability: Array.isArray(data?.by_vulnerability)
+          ? data.by_vulnerability
+          : [],
+      });
 
-        setSummary({
-          ...data,
+      setDistribution(distributions);
+      setValidationRecords(records);
 
-          by_purok: Array.isArray(data?.by_purok)
-            ? data.by_purok
-            : [],
+      console.log('Approved households per program:', distributions);
+    } catch (e) {
+      if (cancelled) return;
 
-          by_vulnerability:
-            Array.isArray(data?.by_vulnerability)
-              ? data.by_vulnerability
-              : [],
-        });
+      console.error('Failed to load analytics:', e);
 
-        setDistribution(distributions);
-
-        setValidationRecords(records);
-
-        console.log(
-          'Validation records:',
-          records
-        );
-
-        console.log(
-          'Distribution records:',
-          distributions
-        );
-      } catch (e) {
-        if (cancelled) {
-          return;
-        }
-
-        console.error(
-          'Failed to load analytics:',
-          e
-        );
-
-        setError(
-          e?.response?.data?.error ||
-          e?.response?.data?.message ||
-          e?.message ||
-          'Failed to load analytics data.'
-        );
-      }
+      setError(
+        e?.response?.data?.error ||
+        e?.response?.data?.message ||
+        e?.message ||
+        'Failed to load analytics data.'
+      );
     }
+  }
 
-    loadData();
+  loadData();
 
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
 
   /* =======================================================
      PUROK
