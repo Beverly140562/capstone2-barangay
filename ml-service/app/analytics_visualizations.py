@@ -279,12 +279,12 @@ def create_income_chart(records):
 
 
 
+
 def create_feature_relationship_chart(records):
     """
-    Pearson correlation heatmap using actual household data.
-
-    Displays up to 10 available household features.
-    Missing features are not assigned invented values.
+    Pearson correlation heatmap using pure Python.
+    Does not use Pandas, NumPy, Matplotlib, or Seaborn.
+    Only displays features actually present in the records.
     """
 
     numeric_columns = [
@@ -302,50 +302,85 @@ def create_feature_relationship_chart(records):
 
     if not records:
         svg = _svg_start("Household Data Correlation Heatmap")
-        svg += '''
+        svg += """
         <text x="400" y="250" text-anchor="middle"
               font-family="Arial" font-size="18">
             No household data available
         </text>
-        '''
+        """
         return _image(svg + _svg_end())
-
-    # Convert available features to numeric values.
-    df = pd.DataFrame(records)
 
     available_columns = [
         column for column in numeric_columns
-        if column in df.columns
+        if any(column in row for row in records)
     ]
 
-    missing_columns = [
-        column for column in numeric_columns
-        if column not in df.columns
-    ]
-
-    if len(available_columns) < 2:
-        raise ValueError(
-            "Not enough available numeric features for correlation."
-        )
+    # Convert actual values to numbers without inventing missing values.
+    data = {}
 
     for column in available_columns:
-        df[column] = pd.to_numeric(
-            df[column],
-            errors="coerce"
-        )
+        values = []
 
-    # Remove columns without usable numeric values.
-    df = df[available_columns].dropna(axis=1, how="all")
+        for row in records:
+            values.append(_number(row.get(column)))
 
-    columns = list(df.columns)
+        if any(value is not None for value in values):
+            data[column] = values
+
+    columns = list(data.keys())
 
     if len(columns) < 2:
-        raise ValueError(
-            "Not enough numeric household features."
+        svg = _svg_start("Household Data Correlation Heatmap")
+        svg += """
+        <text x="400" y="250" text-anchor="middle"
+              font-family="Arial" font-size="18">
+            Not enough numeric features for correlation
+        </text>
+        """
+        return _image(svg + _svg_end())
+
+    def pearson_correlation(values_a, values_b):
+        pairs = [
+            (a, b)
+            for a, b in zip(values_a, values_b)
+            if a is not None and b is not None
+        ]
+
+        if len(pairs) < 2:
+            return None
+
+        xs = [pair[0] for pair in pairs]
+        ys = [pair[1] for pair in pairs]
+
+        mean_x = sum(xs) / len(xs)
+        mean_y = sum(ys) / len(ys)
+
+        numerator = sum(
+            (x - mean_x) * (y - mean_y)
+            for x, y in pairs
         )
 
-    # Calculate Pearson correlation.
-    correlation = df.corr(method="pearson")
+        sum_x = sum((x - mean_x) ** 2 for x in xs)
+        sum_y = sum((y - mean_y) ** 2 for y in ys)
+
+        denominator = math.sqrt(sum_x * sum_y)
+
+        if denominator == 0:
+            return None
+
+        return max(-1.0, min(1.0, numerator / denominator))
+
+    # Calculate the correlation matrix using pure Python.
+    correlation = {}
+
+    for row_name in columns:
+        correlation[row_name] = {}
+
+        for col_name in columns:
+            correlation[row_name][col_name] = pearson_correlation(
+                data[row_name],
+                data[col_name],
+            )
 
     # Heatmap dimensions.
     cell = 58
@@ -355,9 +390,10 @@ def create_feature_relationship_chart(records):
     chart_width = left + len(columns) * cell + 80
     chart_height = top + len(columns) * cell + 190
 
-    svg = f'''<svg xmlns="http://www.w3.org/2000/svg"
-        width="{chart_width}" height="{chart_height}"
-        viewBox="0 0 {chart_width} {chart_height}">
+    svg = f"""
+    <svg xmlns="http://www.w3.org/2000/svg"
+         width="{chart_width}" height="{chart_height}"
+         viewBox="0 0 {chart_width} {chart_height}">
         <rect width="100%" height="100%" fill="white"/>
 
         <text x="{chart_width / 2}" y="40"
@@ -367,15 +403,12 @@ def create_feature_relationship_chart(records):
               font-weight="bold">
             Household Data Correlation Heatmap
         </text>
-    '''
+    """
 
-    # Draw heatmap rows and columns.
     for row_index, row_name in enumerate(columns):
-
         y = top + row_index * cell
 
-        # Y-axis labels.
-        svg += f'''
+        svg += f"""
         <text x="{left - 12}"
               y="{y + cell / 2 + 5}"
               text-anchor="end"
@@ -383,19 +416,16 @@ def create_feature_relationship_chart(records):
               font-size="12">
             {escape(row_name)}
         </text>
-        '''
+        """
 
         for col_index, col_name in enumerate(columns):
-
             x = left + col_index * cell
-            value = correlation.loc[row_name, col_name]
+            value = correlation[row_name][col_name]
 
-            if pd.isna(value):
+            if value is None:
                 color = "rgb(225,225,225)"
                 label = "N/A"
-
             else:
-                value = max(-1.0, min(1.0, float(value)))
                 intensity = int(abs(value) * 255)
 
                 if value < 0:
@@ -411,7 +441,7 @@ def create_feature_relationship_chart(records):
 
                 label = f"{value:.2f}"
 
-            svg += f'''
+            svg += f"""
             <rect x="{x}" y="{y}"
                   width="{cell}" height="{cell}"
                   fill="{color}"
@@ -425,15 +455,14 @@ def create_feature_relationship_chart(records):
                   font-size="11">
                 {label}
             </text>
-            '''
+            """
 
     # X-axis labels.
     for col_index, col_name in enumerate(columns):
-
         x = left + col_index * cell + cell / 2
         y = top - 10
 
-        svg += f'''
+        svg += f"""
         <text x="{x}" y="{y}"
               text-anchor="end"
               transform="rotate(-45 {x} {y})"
@@ -441,13 +470,19 @@ def create_feature_relationship_chart(records):
               font-size="11">
             {escape(col_name)}
         </text>
-        '''
+        """
 
-    # Display missing features instead of silently inventing data.
+    missing_columns = [
+        column for column in numeric_columns
+        if column not in data
+    ]
+
     if missing_columns:
-        missing_text = "Missing features: " + ", ".join(missing_columns)
+        missing_text = "Missing features: " + ", ".join(
+            missing_columns
+        )
 
-        svg += f'''
+        svg += f"""
         <text x="{chart_width / 2}"
               y="{chart_height - 65}"
               text-anchor="middle"
@@ -456,16 +491,18 @@ def create_feature_relationship_chart(records):
               fill="#A33">
             {escape(missing_text)}
         </text>
-        '''
+        """
 
-    svg += f'''
+    svg += f"""
         <text x="{chart_width / 2}"
               y="{chart_height - 30}"
               text-anchor="middle"
               font-family="Arial"
               font-size="13">
-            Pearson correlation | {len(df)} household records
+            Pearson correlation | {len(records)} household records
         </text>
-    '''
+    </svg>
+    """
 
-    return _image(svg + "</svg>")
+    return _image(svg)
+

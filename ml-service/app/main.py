@@ -682,6 +682,7 @@ def get_chart_households():
     """)
 
 
+
 def generate_chart_response(chart_function, records):
     image_buffer = chart_function(records)
 
@@ -694,25 +695,18 @@ def generate_chart_response(chart_function, records):
     if not image_bytes:
         raise RuntimeError("Generated chart image is empty.")
 
-    if image_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
-        media_type = "image/png"
-
-    elif b"<svg" in image_bytes[:1000]:
-        media_type = "image/svg+xml"
-
-    else:
-        raise RuntimeError(
-            f"Unsupported chart format: {image_bytes[:50]!r}"
-        )
+    if b"<svg" not in image_bytes[:1000]:
+        raise RuntimeError("Chart did not generate a valid SVG image.")
 
     return Response(
-    content=image_bytes,
-    media_type=media_type,
-    headers={
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Cross-Origin-Resource-Policy": "cross-origin",
-    },
-)
+        content=image_bytes,
+        media_type="image/svg+xml",
+        headers={
+            "Cache-Control": "public, max-age=300",
+            "Cross-Origin-Resource-Policy": "cross-origin",
+        },
+    )
+
 
 def get_filtered_chart_records(
     dateRange="All Time",
@@ -792,6 +786,7 @@ def income_chart(
         ) from exc
 
 
+
 @app.get("/analytics/charts/relationships")
 def relationships_chart(
     dateRange: str = Query("All Time"),
@@ -800,7 +795,7 @@ def relationships_chart(
     endDate: str | None = Query(None),
 ):
     try:
-        print("[RELATIONSHIPS] Request received")
+        print("[RELATIONSHIPS] 1. Request received", flush=True)
 
         records = get_filtered_chart_records(
             dateRange,
@@ -809,21 +804,26 @@ def relationships_chart(
             endDate,
         )
 
-        print("[RELATIONSHIPS] Records:", len(records))
+        print(
+            f"[RELATIONSHIPS] 2. Records fetched: {len(records)}",
+            flush=True,
+        )
+
+        print("[RELATIONSHIPS] 3. Starting SVG generation", flush=True)
 
         response = generate_chart_response(
             create_feature_relationship_chart,
             records,
         )
 
-        print("[RELATIONSHIPS] Chart generated successfully")
+        print("[RELATIONSHIPS] 4. SVG generated successfully", flush=True)
 
         return response
 
     except Exception as exc:
         import traceback
 
-        print("[RELATIONSHIPS] ERROR:")
+        print("[RELATIONSHIPS] ERROR:", repr(exc), flush=True)
         traceback.print_exc()
 
         raise HTTPException(
