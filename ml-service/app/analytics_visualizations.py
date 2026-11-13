@@ -401,7 +401,7 @@ def create_feature_relationship_chart(records):
 
     # LARGE CHART LAYOUT.
     cell = 180
-    left = 390
+    left = 360
     top = 260
 
     matrix_size = len(columns) * cell
