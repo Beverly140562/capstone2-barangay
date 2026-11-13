@@ -377,11 +377,11 @@ def create_feature_relationship_chart(records):
 
     # Heatmap dimensions.
     cell = 58
-    left = 330
-    top = 190
+    left = 300
+    top = 150
 
     chart_width = left + len(columns) * cell + 80
-    chart_height = top + len(columns) * cell + 190
+    chart_height = top + len(columns) * cell + 150
 
     svg = f"""
     <svg xmlns="http://www.w3.org/2000/svg"
@@ -491,7 +491,7 @@ def create_feature_relationship_chart(records):
               y="{chart_height - 30}"
               text-anchor="middle"
               font-family="Arial"
-              font-size="13">
+              font-size="16">
             Pearson correlation | {len(records)} household records
         </text>
     </svg>
