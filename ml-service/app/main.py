@@ -71,10 +71,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
-    expose_headers=["Content-Disposition"],
-    max_age=600,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Content-Type", "Content-Disposition"],
 )
 
 
@@ -684,52 +683,36 @@ def get_chart_households():
 
 
 def generate_chart_response(chart_function, records):
-    """
-    Generate a chart and return the correct image format.
-    Supports PNG and SVG.
-    """
-
     image_buffer = chart_function(records)
 
     if image_buffer is None:
-        raise RuntimeError(
-            "Chart function returned no image."
-        )
+        raise RuntimeError("Chart function returned no image.")
 
-    if hasattr(image_buffer, "seek"):
-        image_buffer.seek(0)
-
+    image_buffer.seek(0)
     image_bytes = image_buffer.getvalue()
 
     if not image_bytes:
-        raise RuntimeError(
-            "Generated chart image is empty."
-        )
+        raise RuntimeError("Generated chart image is empty.")
 
-    # Detect actual image format
     if image_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
         media_type = "image/png"
 
-    elif image_bytes.lstrip().startswith(b"<svg") or (
-        image_bytes.lstrip().startswith(b"<?xml")
-        and b"<svg" in image_bytes[:1000]
-    ):
+    elif b"<svg" in image_bytes[:1000]:
         media_type = "image/svg+xml"
 
     else:
         raise RuntimeError(
-            "Unsupported chart image format. "
-            f"First bytes: {image_bytes[:50]!r}"
+            f"Unsupported chart format: {image_bytes[:50]!r}"
         )
 
     return Response(
-        content=image_bytes,
-        media_type=media_type,
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate"
-        }
-    )
-
+    content=image_bytes,
+    media_type=media_type,
+    headers={
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Cross-Origin-Resource-Policy": "cross-origin",
+    },
+)
 
 def get_filtered_chart_records(
     dateRange="All Time",

@@ -131,7 +131,6 @@ const params = new URLSearchParams({
       chartUrl
     );
 
-    event.currentTarget.style.display = "none";
   }}
 />
 
