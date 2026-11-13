@@ -281,17 +281,20 @@ def create_income_chart(records):
 
 
 
+
 def create_feature_relationship_chart(records):
     """
-    Clean Pearson correlation heatmap using pure Python.
-    Displays only numeric features available in the records.
+    Large Pearson correlation heatmap using pure Python.
+    Displays only:
+    - Member Count
+    - Household Monthly Income
+    - Family Size
     """
 
     numeric_columns = [
         "member_count",
         "household_monthly_income",
         "family_size",
-        
     ]
 
     display_names = {
@@ -301,7 +304,6 @@ def create_feature_relationship_chart(records):
             "Income"
         ],
         "family_size": ["Family Size"],
-        
     }
 
     title = "Household Data Correlation Heatmap"
@@ -309,8 +311,8 @@ def create_feature_relationship_chart(records):
     if not records:
         svg = _svg_start(title)
         svg += """
-        <text x="400" y="250" text-anchor="middle"
-              font-family="Arial" font-size="18">
+        <text x="600" y="350" text-anchor="middle"
+              font-family="Arial" font-size="22">
             No household data available
         </text>
         """
@@ -338,8 +340,8 @@ def create_feature_relationship_chart(records):
     if len(columns) < 2:
         svg = _svg_start(title)
         svg += """
-        <text x="400" y="250" text-anchor="middle"
-              font-family="Arial" font-size="18">
+        <text x="600" y="350" text-anchor="middle"
+              font-family="Arial" font-size="22">
             Not enough numeric features for correlation
         </text>
         """
@@ -397,12 +399,15 @@ def create_feature_relationship_chart(records):
         for row_name in columns
     }
 
-    # Layout settings.
-    cell = 130
-    left = 330
-    top = 205
-    width = 950
-    height = max(570, top + len(columns) * cell + 150)
+    # LARGE CHART LAYOUT.
+    cell = 180
+    left = 390
+    top = 260
+
+    matrix_size = len(columns) * cell
+
+    width = left + matrix_size + 120
+    height = top + matrix_size + 150
 
     svg = f"""
     <svg xmlns="http://www.w3.org/2000/svg"
@@ -412,77 +417,94 @@ def create_feature_relationship_chart(records):
 
         <rect width="100%" height="100%" fill="white"/>
 
-        <text x="{width / 2}" y="45"
+        <text x="{width / 2}" y="65"
               text-anchor="middle"
               font-family="Arial"
-              font-size="25"
+              font-size="30"
               font-weight="bold"
               fill="#333333">
             {escape(title)}
         </text>
 
+        <text x="{width / 2}" y="110"
+              text-anchor="middle"
+              font-family="Arial"
+              font-size="18"
+              fill="#777777">
+            Pearson Correlation Coefficient
+        </text>
     """
 
-    # Column labels: horizontal and centered.
+    # COLUMN LABELS.
     for col_index, col_name in enumerate(columns):
 
         x = left + col_index * cell + cell / 2
+
         labels = display_names.get(
-            col_name, [col_name.replace("_", " ").title()]
+            col_name,
+            [col_name.replace("_", " ").title()]
+        )
+
+        label_start = top - 55 - (
+            (len(labels) - 1) * 12
         )
 
         svg += f"""
-        <text x="{x}" y="{top - 35}"
+        <text x="{x}" y="{label_start}"
               text-anchor="middle"
               font-family="Arial"
-              font-size="16"
+              font-size="20"
               font-weight="bold"
               fill="#444444">
         """
 
         for line_index, line in enumerate(labels):
-            dy = 0 if line_index == 0 else 17
+            dy = 0 if line_index == 0 else 26
 
             svg += f"""
-            <tspan x="{x}" dy="{dy}">{escape(line)}</tspan>
-            """
-
-        svg += "</text>"
-
-    # Heatmap rows and cells.
-    for row_index, row_name in enumerate(columns):
-
-        y = top + row_index * cell
-        row_labels = display_names.get(
-            row_name, [row_name.replace("_", " ").title()]
-        )
-
-        # Row labels.
-        label_start = y + cell / 2 - (
-            (len(row_labels) - 1) * 8
-        )
-
-        svg += f"""
-        <text x="{left - 20}" y="{label_start}"
-              text-anchor="end"
-              font-family="Arial"
-              font-size="16"
-              font-weight="bold"
-              fill="#444444">
-        """
-
-        for line_index, line in enumerate(row_labels):
-            dy = 0 if line_index == 0 else 17
-
-            svg += f"""
-            <tspan x="{left - 20}" dy="{dy}">
+            <tspan x="{x}" dy="{dy}">
                 {escape(line)}
             </tspan>
             """
 
         svg += "</text>"
 
-        # Correlation cells.
+    # HEATMAP ROWS AND CELLS.
+    for row_index, row_name in enumerate(columns):
+
+        y = top + row_index * cell
+
+        row_labels = display_names.get(
+            row_name,
+            [row_name.replace("_", " ").title()]
+        )
+
+        label_start = y + cell / 2 - (
+            (len(row_labels) - 1) * 13
+        )
+
+        # ROW LABELS.
+        svg += f"""
+        <text x="{left - 30}" y="{label_start}"
+              text-anchor="end"
+              font-family="Arial"
+              font-size="20"
+              font-weight="bold"
+              fill="#444444">
+        """
+
+        for line_index, line in enumerate(row_labels):
+            dy = 0 if line_index == 0 else 26
+
+            svg += f"""
+            <tspan x="{left - 30}" dy="{dy}">
+                {escape(line)}
+            </tspan>
+            """
+
+        svg += "</text>"
+
+        # CORRELATION CELLS.
         for col_index, col_name in enumerate(columns):
 
             x = left + col_index * cell
@@ -495,21 +517,25 @@ def create_feature_relationship_chart(records):
 
             elif value < 0:
                 intensity = int(abs(value) * 180)
+
                 color = (
                     f"rgb(255,"
                     f"{255 - intensity},"
                     f"{255 - intensity})"
                 )
+
                 label = f"{value:.2f}"
 
             else:
                 intensity = int(value * 180)
+
                 color = (
                     f"rgb("
                     f"{255 - intensity},"
                     f"{255 - intensity},"
                     f"255)"
                 )
+
                 label = f"{value:.2f}"
 
             svg += f"""
@@ -517,22 +543,22 @@ def create_feature_relationship_chart(records):
                   width="{cell}" height="{cell}"
                   fill="{color}"
                   stroke="#FFFFFF"
-                  stroke-width="3"
-                  rx="5"/>
+                  stroke-width="5"
+                  rx="8"/>
 
             <text x="{x + cell / 2}"
-                  y="{y + cell / 2 + 6}"
+                  y="{y + cell / 2 + 12}"
                   text-anchor="middle"
                   font-family="Arial"
-                  font-size="19"
+                  font-size="32"
                   font-weight="bold"
                   fill="#333333">
                 {label}
             </text>
             """
 
-    # Footer.
-    footer_y = top + len(columns) * cell + 55
+    # FOOTER.
+    footer_y = top + matrix_size + 65
 
     svg += f"""
         <text x="{width / 2}" y="{footer_y}"
