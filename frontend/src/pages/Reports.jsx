@@ -259,7 +259,6 @@ function hasSuggestedProgram(row) {
 function isIncompleteAssistanceInformation(row) {
   return (
     isHighOrMediumVulnerability(row) &&
-    !hasIncomeProof(row) &&
     !hasSuggestedProgram(row)
   );
 }
@@ -420,8 +419,12 @@ if (reportType === 'households') {
           : 'Missing';
     }),
     column('Assistance Program', [
-      'suggested_programs',
-    ], () => 'No program detected'),
+  'suggested_programs',
+], (value) => {
+  return hasSuggestedProgram({ suggested_programs: value })
+    ? reportCell(value)
+    : 'No program detected';
+}),
   ];
 }
 
