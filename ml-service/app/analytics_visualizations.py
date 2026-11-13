@@ -2,11 +2,7 @@
 import io
 import math
 from html import escape
-import matplotlib
-matplotlib.use("Agg")
 
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 import pandas as pd
 
@@ -86,106 +82,201 @@ def create_vulnerability_chart(records):
 
 
 
+
 def create_income_chart(records):
     """
-    Household Monthly Income Distribution
-    Uses Seaborn histogram with KDE, similar to Google Colab.
+    Household Monthly Income Distribution.
+    Lightweight SVG histogram with KDE curve.
+    Uses 20 bins, matching the Google Colab chart.
     """
 
     values = []
 
     for row in records or []:
-        value = _number(
-            row.get("household_monthly_income")
-        )
+        value = _number(row.get("household_monthly_income"))
 
         if value is not None and value >= 0:
             values.append(value)
 
-    # No data available
-    if not values:
-        svg = _svg_start(
-            "Household Monthly Income Distribution"
-        )
+    svg = _svg_start("Household Monthly Income Distribution")
 
+    if not values:
         svg += '''
         <text x="400" y="250" text-anchor="middle"
               font-family="Arial" font-size="18">
             No income data available
         </text>
         '''
-
         return _image(svg + _svg_end())
 
-    # Create DataFrame
-    df = pd.DataFrame({
-        "household_monthly_income": values
-    })
+    import statistics
 
-    # Create Seaborn histogram
-    fig, ax = plt.subplots(figsize=(9, 5))
+    bins = 20
+    minimum = min(values)
+    maximum = max(values)
 
-    sns.histplot(
-        data=df,
-        x="household_monthly_income",
-        bins=20,
-        kde=len(set(values)) > 1,
-        ax=ax,
-        color="#6E2430"
-    )
+    # Avoid zero-width bins when all incomes are identical.
+    if minimum == maximum:
+        maximum = minimum + 1
 
-    # Chart title and labels
-    ax.set_title(
-        "Household Monthly Income Distribution",
-        fontsize=14,
-        fontweight="bold"
-    )
+    bin_width = (maximum - minimum) / bins
 
-    ax.set_xlabel(
-        "Monthly Income (₱)",
-        fontsize=11
-    )
+    counts = [0] * bins
 
-    ax.set_ylabel(
-        "Number of Households",
-        fontsize=11
-    )
+    for value in values:
+        index = int((value - minimum) / bin_width)
+        index = min(index, bins - 1)
+        counts[index] += 1
 
-    # Prevent scientific notation
-    ax.ticklabel_format(
-        style="plain",
-        axis="x"
-    )
+    # Chart dimensions
+    left = 95
+    right = 760
+    top = 95
+    bottom = 490
 
-    # Format income labels
-    ax.get_xaxis().set_major_formatter(
-        plt.FuncFormatter(
-            lambda x, _: f"₱{x:,.0f}"
+    chart_width = right - left
+    chart_height = bottom - top
+
+    max_count = max(counts) or 1
+    y_max = max_count * 1.2
+
+    # Background and axes
+    svg += f'''
+    <line x1="{left}" y1="{bottom}"
+          x2="{right}" y2="{bottom}"
+          stroke="#333" stroke-width="2"/>
+
+    <line x1="{left}" y1="{top}"
+          x2="{left}" y2="{bottom}"
+          stroke="#333" stroke-width="2"/>
+
+    <text x="420" y="555"
+          text-anchor="middle"
+          font-family="Arial" font-size="16">
+        Monthly Income (₱)
+    </text>
+
+    <text x="25" y="290"
+          text-anchor="middle"
+          transform="rotate(-90 25 290)"
+          font-family="Arial" font-size="16">
+        Number of Households
+    </text>
+    '''
+
+    # Y-axis grid and labels
+    for tick in range(5):
+        count_value = y_max * tick / 4
+        y = bottom - (count_value / y_max) * chart_height
+
+        svg += f'''
+        <line x1="{left}" y1="{y:.2f}"
+              x2="{right}" y2="{y:.2f}"
+              stroke="#ddd" stroke-width="1"/>
+
+        <text x="{left - 12}" y="{y + 5:.2f}"
+              text-anchor="end"
+              font-family="Arial" font-size="12">
+            {count_value:.0f}
+        </text>
+        '''
+
+    # Histogram bars
+    bar_width = chart_width / bins
+
+    for index, count in enumerate(counts):
+        height = count / y_max * chart_height
+        x = left + index * bar_width
+        y = bottom - height
+
+        svg += f'''
+        <rect x="{x + 1:.2f}" y="{y:.2f}"
+              width="{max(0, bar_width - 2):.2f}"
+              height="{height:.2f}"
+              fill="#6E2430"
+              opacity="0.85"/>
+        '''
+
+    # X-axis labels
+    for index in range(5):
+        income = minimum + (maximum - minimum) * index / 4
+        x = left + chart_width * index / 4
+
+        svg += f'''
+        <text x="{x:.2f}" y="{bottom + 25}"
+              text-anchor="middle"
+              font-family="Arial" font-size="11">
+            ₱{income:,.0f}
+        </text>
+        '''
+
+    # KDE curve using Gaussian kernel estimation.
+    if len(values) > 1 and len(set(values)) > 1:
+
+        mean = statistics.mean(values)
+        std = statistics.stdev(values)
+
+        bandwidth = max(
+            1.06 * std * len(values) ** (-0.2),
+            bin_width * 0.15,
+            1
         )
-    )
 
-    ax.grid(
-        axis="y",
-        alpha=0.25
-    )
+        points = []
+        steps = 100
 
-    fig.tight_layout()
+        for step in range(steps + 1):
+            x_value = minimum + (
+                maximum - minimum
+            ) * step / steps
 
-    # Save chart as PNG in memory
-    image_buffer = io.BytesIO()
+            density = sum(
+                math.exp(
+                    -0.5 * ((x_value - value) / bandwidth) ** 2
+                )
+                for value in values
+            )
 
-    fig.savefig(
-        image_buffer,
-        format="png",
-        dpi=150,
-        bbox_inches="tight"
-    )
+            density /= (
+                len(values)
+                * bandwidth
+                * math.sqrt(2 * math.pi)
+            )
 
-    plt.close(fig)
+            # Convert density to histogram-count scale.
+            estimated_count = density * len(values) * bin_width
 
-    image_buffer.seek(0)
+            x = left + (
+                (x_value - minimum) / (maximum - minimum)
+            ) * chart_width
 
-    return image_buffer
+            y = bottom - (
+                estimated_count / y_max
+            ) * chart_height
+
+            points.append(f"{x:.2f},{y:.2f}")
+
+        svg += f'''
+        <polyline points="{' '.join(points)}"
+                  fill="none"
+                  stroke="#D18B35"
+                  stroke-width="3"
+                  stroke-linejoin="round"
+                  stroke-linecap="round"/>
+        '''
+
+    # Total household count
+    svg += f'''
+    <text x="{right}" y="65"
+          text-anchor="end"
+          font-family="Arial" font-size="13"
+          fill="#555">
+        Total households: {len(values)}
+    </text>
+    '''
+
+    return _image(svg + _svg_end())
+
 
 
 def create_feature_relationship_chart(records):
