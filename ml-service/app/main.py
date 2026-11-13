@@ -177,7 +177,11 @@ load_model()
 
 class Household(BaseModel):
     monthly_income: float | None = None
+    household_monthly_income: float | None = None
+
     family_number: int | None = None
+    family_position: str | None = None
+
     age: int | None = None
     length_residency: int | None = None
 
@@ -186,7 +190,6 @@ class Household(BaseModel):
     highest_education: str | None = None
     occupation: str | None = None
     residence: str | None = None
-    family_position: str | None = None
 
     disability_present: bool | None = None
     four_ps_member: str | None = None
@@ -1038,6 +1041,7 @@ def display_vulnerability(label: str) -> str:
  
 
 
+
 def predict_one(
     row: Household,
     programs: list[Program] | None = None,
@@ -1048,7 +1052,10 @@ def predict_one(
     programs = programs or []
     members = members or []
 
-    # IDENTIFY HOUSEHOLD COMPOSITION
+    # ========================================================
+    # HOUSEHOLD COMPOSITION
+    # ========================================================
+
     family_position = normalize_rule(row.family_position)
 
     is_solo = (
@@ -1057,113 +1064,17 @@ def predict_one(
         or row.family_size == 1
     )
 
-    if is_solo and not members:
-
-        # SOLO HOUSEHOLD
-        member_count = 1
-        family_size = 1
-        household_income = row.monthly_income
-
-        all_unemployed = (
-            normalize_rule(row.occupation) == "unemployed"
-        )
-
-        disability = has_disability(row.disability_present)
-        illness = has_illness(row.leading_illnesses)
-
-        senior_citizen = (
-            row.age is not None and row.age >= 60
-        )
-
-        composition = "Solo household"
-
-    elif members:
-
-        # HOUSEHOLD RECORD + ADDITIONAL MEMBER RECORDS
+    if members:
         member_count = len(members) + 1
         family_size = member_count
-
-        # TOTAL HOUSEHOLD MONTHLY INCOME
-        household_income = (
-            float(row.monthly_income or 0)
-            + sum(
-                float(member.get("monthly_income") or 0)
-                for member in members
-            )
-        )
-
-        # ALL MEMBERS MUST BE EXPLICITLY UNEMPLOYED
-        all_unemployed = (
-            normalize_rule(row.occupation) == "unemployed"
-            and all(
-                normalize_rule(member.get("occupation")) == "unemployed"
-                for member in members
-            )
-        )
-
-        # DISABILITY CHECK
-        disability = (
-            has_disability(row.disability_present)
-            or any(
-                has_disability(member.get("disability_present"))
-                for member in members
-            )
-        )
-
-        # ILLNESS CHECK
-        illness = (
-            has_illness(row.leading_illnesses)
-            or any(
-                has_illness(member.get("leading_illnesses"))
-                for member in members
-            )
-        )
-
-        # SENIOR CITIZEN CHECK
-        def is_senior(member):
-            member_age = member.get("age")
-
-            if member_age is not None:
-                try:
-                    return int(member_age) >= 60
-                except (ValueError, TypeError):
-                    return False
-
-            birthday = member.get("birthday")
-
-            if birthday:
-                try:
-                    birth_date = datetime.fromisoformat(
-                        str(birthday).replace("Z", "+00:00")
-                    ).date()
-
-                    today = date.today()
-
-                    age = (
-                        today.year
-                        - birth_date.year
-                        - (
-                            (today.month, today.day)
-                            < (birth_date.month, birth_date.day)
-                        )
-                    )
-
-                    return age >= 60
-
-                except (ValueError, TypeError):
-                    return False
-
-            return False
-
-        senior_citizen = (
-            (row.age is not None and row.age >= 60)
-            or any(is_senior(member) for member in members)
-        )
-
         composition = "Household with member records"
 
-    else:
+    elif is_solo:
+        member_count = 1
+        family_size = 1
+        composition = "Solo household"
 
+    else:
         raise HTTPException(
             status_code=422,
             detail=(
@@ -1173,7 +1084,145 @@ def predict_one(
             ),
         )
 
-    # HEAD EDUCATION
+    # ========================================================
+    # HOUSEHOLD MONTHLY INCOME
+    # ========================================================
+
+    if row.household_monthly_income is not None:
+
+        household_income = float(
+            row.household_monthly_income
+        )
+
+    else:
+
+        individual_incomes = [
+            row.monthly_income,
+            *[
+                member.get("monthly_income")
+                for member in members
+            ],
+        ]
+
+        # Do not silently convert missing income into zero.
+        if any(
+            value is None or value == ""
+            for value in individual_incomes
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Complete monthly income records are required "
+                    "to calculate household monthly income."
+                ),
+            )
+
+        try:
+            household_income = sum(
+                float(value)
+                for value in individual_incomes
+            )
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=422,
+                detail="Invalid household monthly income.",
+            )
+
+    # ========================================================
+    # ALL MEMBERS EXPLICITLY UNEMPLOYED
+    # ========================================================
+
+    occupations = [
+        row.occupation,
+        *[
+            member.get("occupation")
+            for member in members
+        ],
+    ]
+
+    all_unemployed = all(
+        normalize_rule(occupation) in {
+            "unemployed",
+            "not employed",
+            "currently unemployed",
+        }
+        for occupation in occupations
+    )
+
+    # ========================================================
+    # DISABILITY
+    # ========================================================
+
+    disability = (
+        has_disability(row.disability_present)
+        or any(
+            has_disability(
+                member.get("disability_present")
+            )
+            for member in members
+        )
+    )
+
+    # ========================================================
+    # ILLNESS
+    # ========================================================
+
+    illness = (
+        has_illness(row.leading_illnesses)
+        or any(
+            has_illness(member.get("leading_illnesses"))
+            for member in members
+        )
+    )
+
+    # ========================================================
+    # SENIOR CITIZEN
+    # ========================================================
+
+    def is_senior(member):
+        member_age = member.get("age")
+
+        if member_age is not None:
+            try:
+                return int(member_age) >= 60
+            except (ValueError, TypeError):
+                return False
+
+        birthday = member.get("birthday")
+
+        if birthday:
+            try:
+                birth_date = datetime.fromisoformat(
+                    str(birthday).replace("Z", "+00:00")
+                ).date()
+
+                today = date.today()
+
+                age = (
+                    today.year
+                    - birth_date.year
+                    - (
+                        (today.month, today.day)
+                        < (birth_date.month, birth_date.day)
+                    )
+                )
+
+                return age >= 60
+
+            except (ValueError, TypeError):
+                return False
+
+        return False
+
+    senior_citizen = (
+        (row.age is not None and row.age >= 60)
+        or any(is_senior(member) for member in members)
+    )
+
+    # ========================================================
+    # HOUSEHOLD HEAD EDUCATION
+    # ========================================================
+
     head_education = (
         row.head_education
         or row.highest_education
@@ -1185,20 +1234,34 @@ def predict_one(
             detail="Household head education is missing.",
         )
 
-    # BUILD RANDOM FOREST INPUT
-    input_df = pd.DataFrame([{
-        "member_count": member_count,
-        "head_education": head_education,
-        "household_monthly_income": household_income,
-        "family_size": family_size,
-        "all_members_explicitly_unemployed": all_unemployed,
-        "provisional_disability_indicator": disability,
-        "illness_indicator": illness,
-    }], columns=_feature_names)
+    # ========================================================
+    # RANDOM FOREST INPUT
+    # ========================================================
 
+    input_df = pd.DataFrame(
+        [{
+            "member_count": member_count,
+            "head_education": head_education,
+            "household_monthly_income": household_income,
+            "family_size": family_size,
+            "all_members_explicitly_unemployed": all_unemployed,
+            "provisional_disability_indicator": disability,
+            "illness_indicator": illness,
+        }],
+        columns=_feature_names,
+    )
+
+    print("[ML] RANDOM FOREST INPUT:")
+    print(input_df.to_dict(orient="records"))
+
+    # ========================================================
     # RANDOM FOREST PREDICTION
+    # ========================================================
+
     prediction = _model.predict(input_df)[0]
+
     probabilities = _model.predict_proba(input_df)[0]
+
     classes = _model.classes_
 
     probability_result = {
@@ -1207,35 +1270,27 @@ def predict_one(
     }
 
     rf_label = str(prediction)
-    rf_vulnerability = display_vulnerability(rf_label)
+
+    vulnerability = display_vulnerability(rf_label)
 
     rf_probability = round(
         float(max(probabilities)),
         4,
     )
 
-    vulnerability = rf_vulnerability
+    # IMPORTANT:
+    # Do not override the Random Forest classification
+    # using household income thresholds.
+
     classification_source = "Random Forest"
 
-    # EXISTING INCOME CLASSIFICATION
-    if household_income is not None:
-
-        if household_income < 10000:
-            vulnerability = "Highly Vulnerable"
-            classification_source = "Income-based rule"
-
-        elif 10000 <= household_income <= 24000:
-            vulnerability = "Moderately Vulnerable"
-            classification_source = "Income-based rule"
-
-        elif household_income >= 25000:
-            vulnerability = "Low Vulnerable"
-            classification_source = "Income-based rule"
-
-       # PREPARE HOUSEHOLD DATA FOR PROGRAM MATCHING
+    # ========================================================
+    # PREPARE HOUSEHOLD FOR PROGRAM MATCHING
+    # ========================================================
 
     updates = {
         "monthly_income": household_income,
+        "household_monthly_income": household_income,
         "family_size": family_size,
         "member_count": member_count,
         "provisional_disability_indicator": disability,
@@ -1244,9 +1299,17 @@ def predict_one(
     }
 
     if hasattr(row, "model_copy"):
-        matching_household = row.model_copy(update=updates)
+        matching_household = row.model_copy(
+            update=updates
+        )
     else:
-        matching_household = row.copy(update=updates)
+        matching_household = row.copy(
+            update=updates
+        )
+
+    # ========================================================
+    # ASSISTANCE PROGRAM MATCHING
+    # ========================================================
 
     suggested_programs = match_programs(
         matching_household,
@@ -1254,17 +1317,21 @@ def predict_one(
         programs,
     )
 
+    # ========================================================
     # RESPONSE
+    # ========================================================
+
     return {
         "vulnerability": vulnerability,
         "vulnerability_prob": rf_probability,
 
-        "rf_vulnerability": rf_vulnerability,
+        "rf_vulnerability": vulnerability,
         "rf_vulnerability_prob": rf_probability,
 
         "classification_source": classification_source,
 
         "household_composition": composition,
+
         "member_count": member_count,
         "family_size": family_size,
         "household_monthly_income": household_income,
@@ -1274,6 +1341,7 @@ def predict_one(
         ),
 
         "suggested_programs": suggested_programs,
+
         "probabilities": probability_result,
     }
 
