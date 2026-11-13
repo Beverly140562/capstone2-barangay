@@ -280,42 +280,55 @@ def create_income_chart(records):
 
 
 
+
 def create_feature_relationship_chart(records):
     """
-    Pearson correlation heatmap using pure Python.
-    Does not use Pandas, NumPy, Matplotlib, or Seaborn.
-    Only displays features actually present in the records.
+    Clean Pearson correlation heatmap using pure Python.
+    Displays only numeric features available in the records.
     """
 
     numeric_columns = [
         "member_count",
         "household_monthly_income",
         "family_size",
+        
     ]
 
+    display_names = {
+        "member_count": ["Member Count"],
+        "household_monthly_income": [
+            "Household Monthly",
+            "Income"
+        ],
+        "family_size": ["Family Size"],
+        
+    }
+
+    title = "Household Data Correlation Heatmap"
+
     if not records:
-        svg = _svg_start("Household Data Correlation Heatmap")
+        svg = _svg_start(title)
         svg += """
         <text x="400" y="250" text-anchor="middle"
-              font-family="Arial" font-size="16">
+              font-family="Arial" font-size="18">
             No household data available
         </text>
         """
         return _image(svg + _svg_end())
 
+    # Get only columns actually returned by the database.
     available_columns = [
         column for column in numeric_columns
         if any(column in row for row in records)
     ]
 
-    # Convert actual values to numbers without inventing missing values.
     data = {}
 
     for column in available_columns:
-        values = []
-
-        for row in records:
-            values.append(_number(row.get(column)))
+        values = [
+            _number(row.get(column))
+            for row in records
+        ]
 
         if any(value is not None for value in values):
             data[column] = values
@@ -323,16 +336,18 @@ def create_feature_relationship_chart(records):
     columns = list(data.keys())
 
     if len(columns) < 2:
-        svg = _svg_start("Household Data Correlation Heatmap")
+        svg = _svg_start(title)
         svg += """
         <text x="400" y="250" text-anchor="middle"
-              font-family="Arial" font-size="16">
+              font-family="Arial" font-size="18">
             Not enough numeric features for correlation
         </text>
         """
         return _image(svg + _svg_end())
 
+    # Pearson correlation calculation.
     def pearson_correlation(values_a, values_b):
+
         pairs = [
             (a, b)
             for a, b in zip(values_a, values_b)
@@ -353,149 +368,189 @@ def create_feature_relationship_chart(records):
             for x, y in pairs
         )
 
-        sum_x = sum((x - mean_x) ** 2 for x in xs)
-        sum_y = sum((y - mean_y) ** 2 for y in ys)
+        sum_x = sum(
+            (x - mean_x) ** 2 for x in xs
+        )
+
+        sum_y = sum(
+            (y - mean_y) ** 2 for y in ys
+        )
 
         denominator = math.sqrt(sum_x * sum_y)
 
         if denominator == 0:
             return None
 
-        return max(-1.0, min(1.0, numerator / denominator))
+        return max(
+            -1.0,
+            min(1.0, numerator / denominator)
+        )
 
-    # Calculate the correlation matrix using pure Python.
-    correlation = {}
-
-    for row_name in columns:
-        correlation[row_name] = {}
-
-        for col_name in columns:
-            correlation[row_name][col_name] = pearson_correlation(
+    correlation = {
+        row_name: {
+            col_name: pearson_correlation(
                 data[row_name],
-                data[col_name],
+                data[col_name]
             )
+            for col_name in columns
+        }
+        for row_name in columns
+    }
 
-    # Heatmap dimensions.
-    cell = 58
-    left = 300
-    top = 150
-
-    chart_width = left + len(columns) * cell + 80
-    chart_height = top + len(columns) * cell + 150
+    # Layout settings.
+    cell = 110
+    left = 330
+    top = 205
+    width = 950
+    height = max(570, top + len(columns) * cell + 130)
 
     svg = f"""
     <svg xmlns="http://www.w3.org/2000/svg"
-         width="{chart_width}" height="{chart_height}"
-         viewBox="0 0 {chart_width} {chart_height}">
+         width="{width}"
+         height="{height}"
+         viewBox="0 0 {width} {height}">
+
         <rect width="100%" height="100%" fill="white"/>
 
-        <text x="{chart_width / 2}" y="40"
+        <text x="{width / 2}" y="45"
               text-anchor="middle"
               font-family="Arial"
-              font-size="16"
-              font-weight="bold">
-            Household Data Correlation Heatmap
+              font-size="25"
+              font-weight="bold"
+              fill="#333333">
+            {escape(title)}
+        </text>
+
+        <text x="{width / 2}" y="80"
+              text-anchor="middle"
+              font-family="Arial"
+              font-size="14"
+              fill="#777777">
+            Pearson Correlation Coefficient
         </text>
     """
 
-    for row_index, row_name in enumerate(columns):
-        y = top + row_index * cell
+    # Column labels: horizontal and centered.
+    for col_index, col_name in enumerate(columns):
+
+        x = left + col_index * cell + cell / 2
+        labels = display_names.get(
+            col_name, [col_name.replace("_", " ").title()]
+        )
 
         svg += f"""
-        <text x="{left - 12}"
-              y="{y + cell / 2 + 5}"
-              text-anchor="end"
+        <text x="{x}" y="{top - 35}"
+              text-anchor="middle"
               font-family="Arial"
-              font-size="14">
-            {escape(row_name)}
-        </text>
+              font-size="13"
+              font-weight="bold"
+              fill="#444444">
         """
 
+        for line_index, line in enumerate(labels):
+            dy = 0 if line_index == 0 else 17
+
+            svg += f"""
+            <tspan x="{x}" dy="{dy}">{escape(line)}</tspan>
+            """
+
+        svg += "</text>"
+
+    # Heatmap rows and cells.
+    for row_index, row_name in enumerate(columns):
+
+        y = top + row_index * cell
+        row_labels = display_names.get(
+            row_name, [row_name.replace("_", " ").title()]
+        )
+
+        # Row labels.
+        label_start = y + cell / 2 - (
+            (len(row_labels) - 1) * 8
+        )
+
+        svg += f"""
+        <text x="{left - 20}" y="{label_start}"
+              text-anchor="end"
+              font-family="Arial"
+              font-size="13"
+              font-weight="bold"
+              fill="#444444">
+        """
+
+        for line_index, line in enumerate(row_labels):
+            dy = 0 if line_index == 0 else 17
+
+            svg += f"""
+            <tspan x="{left - 20}" dy="{dy}">
+                {escape(line)}
+            </tspan>
+            """
+
+        svg += "</text>"
+
+        # Correlation cells.
         for col_index, col_name in enumerate(columns):
+
             x = left + col_index * cell
+
             value = correlation[row_name][col_name]
 
             if value is None:
-                color = "rgb(225,225,225)"
+                color = "#E5E5E5"
                 label = "N/A"
+
+            elif value < 0:
+                intensity = int(abs(value) * 180)
+                color = (
+                    f"rgb(255,"
+                    f"{255 - intensity},"
+                    f"{255 - intensity})"
+                )
+                label = f"{value:.2f}"
+
             else:
-                intensity = int(abs(value) * 255)
-
-                if value < 0:
-                    color = (
-                        f"rgb(255,{255-intensity},"
-                        f"{255-intensity})"
-                    )
-                else:
-                    color = (
-                        f"rgb({255-intensity},"
-                        f"{255-intensity},255)"
-                    )
-
+                intensity = int(value * 180)
+                color = (
+                    f"rgb("
+                    f"{255 - intensity},"
+                    f"{255 - intensity},"
+                    f"255)"
+                )
                 label = f"{value:.2f}"
 
             svg += f"""
             <rect x="{x}" y="{y}"
                   width="{cell}" height="{cell}"
                   fill="{color}"
-                  stroke="white"
-                  stroke-width="2"/>
+                  stroke="#FFFFFF"
+                  stroke-width="3"
+                  rx="5"/>
 
             <text x="{x + cell / 2}"
-                  y="{y + cell / 2 + 4}"
+                  y="{y + cell / 2 + 6}"
                   text-anchor="middle"
                   font-family="Arial"
-                  font-size="14">
+                  font-size="19"
+                  font-weight="bold"
+                  fill="#333333">
                 {label}
             </text>
             """
 
-    # X-axis labels.
-    for col_index, col_name in enumerate(columns):
-        x = left + col_index * cell + cell / 2
-        y = top - 30
-
-        svg += f"""
-        <text x="{x}" y="{y}"
-              text-anchor="end"
-              transform="rotate(-45 {x} {y})"
-              font-family="Arial"
-              font-size="16">
-            {escape(col_name)}
-        </text>
-        """
-
-    missing_columns = [
-        column for column in numeric_columns
-        if column not in data
-    ]
-
-    if missing_columns:
-        missing_text = "Missing features: " + ", ".join(
-            missing_columns
-        )
-
-        svg += f"""
-        <text x="{chart_width / 2}"
-              y="{chart_height - 65}"
-              text-anchor="middle"
-              font-family="Arial"
-              font-size="16"
-              fill="#A33">
-            {escape(missing_text)}
-        </text>
-        """
+    # Footer.
+    footer_y = top + len(columns) * cell + 55
 
     svg += f"""
-        <text x="{chart_width / 2}"
-              y="{chart_height - 30}"
+        <text x="{width / 2}" y="{footer_y}"
               text-anchor="middle"
               font-family="Arial"
-              font-size="16">
-            Pearson correlation | {len(records)} household records
+              font-size="13"
+              fill="#777777">
+            Based on {len(records)} household records
         </text>
+
     </svg>
     """
 
     return _image(svg)
-
