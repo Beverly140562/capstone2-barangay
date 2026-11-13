@@ -453,14 +453,14 @@ def create_feature_relationship_chart(records):
     # X-axis labels.
     for col_index, col_name in enumerate(columns):
         x = left + col_index * cell + cell / 2
-        y = top + 10
+        y = top - 30
 
         svg += f"""
         <text x="{x}" y="{y}"
               text-anchor="end"
               transform="rotate(-45 {x} {y})"
               font-family="Arial"
-              font-size="14">
+              font-size="16">
             {escape(col_name)}
         </text>
         """
@@ -480,7 +480,7 @@ def create_feature_relationship_chart(records):
               y="{chart_height - 65}"
               text-anchor="middle"
               font-family="Arial"
-              font-size="14"
+              font-size="16"
               fill="#A33">
             {escape(missing_text)}
         </text>
