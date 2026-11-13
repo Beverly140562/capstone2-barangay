@@ -406,7 +406,7 @@ def create_feature_relationship_chart(records):
 
     matrix_size = len(columns) * cell
 
-    width = left + matrix_size + 120
+    width = left + matrix_size + 100
     height = top + matrix_size + 150
 
     svg = f"""
@@ -426,13 +426,7 @@ def create_feature_relationship_chart(records):
             {escape(title)}
         </text>
 
-        <text x="{width / 2}" y="110"
-              text-anchor="middle"
-              font-family="Arial"
-              font-size="18"
-              fill="#777777">
-            Pearson Correlation Coefficient
-        </text>
+    
     """
 
     # COLUMN LABELS.
@@ -564,7 +558,7 @@ def create_feature_relationship_chart(records):
         <text x="{width / 2}" y="{footer_y}"
               text-anchor="middle"
               font-family="Arial"
-              font-size="18"
+              font-size="25"
               fill="#777777">
             Based on {len(records)} household records
         </text>
