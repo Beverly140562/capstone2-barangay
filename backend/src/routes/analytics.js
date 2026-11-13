@@ -311,20 +311,20 @@ router.get('/analytics', async (req, res) => {
 
 
     // -------------------------------------------------------
-    // SUBMITTED HOUSEHOLDS
-    // Count households encoded by STAFF within the selected
-    // date range and Purok filter.
+    // SUBMITTED HOUSEHOLDS FOR ASSISTANCE PROGRAMS
+    // Count distinct households with submitted applications.
+    // Pending, Approved, and Rejected are all submissions.
     // -------------------------------------------------------
 
     const submittedResult = await query(
       `
-      SELECT COUNT(*)::int AS total
-      FROM households h
-      INNER JOIN users u
-        ON u.user_id = h.user_id
+      SELECT COUNT(DISTINCT bv.household_id)::int AS total
+      FROM beneficiary_validation bv
+      INNER JOIN households h
+        ON h.household_id = bv.household_id
       ${householdWhere
-        ? `${householdWhere} AND LOWER(TRIM(u.roles::text)) = 'staff'`
-        : `WHERE LOWER(TRIM(u.roles::text)) = 'staff'`
+        ? `${householdWhere} AND LOWER(TRIM(COALESCE(bv.validation_status, ''))) IN ('pending', 'approved', 'rejected')`
+        : `WHERE LOWER(TRIM(COALESCE(bv.validation_status, ''))) IN ('pending', 'approved', 'rejected')`
       }
       `,
       values
