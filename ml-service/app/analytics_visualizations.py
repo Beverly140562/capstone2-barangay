@@ -291,20 +291,13 @@ def create_feature_relationship_chart(records):
         "member_count",
         "household_monthly_income",
         "family_size",
-        "income_points",
-        "family_size_points",
-        "employment_points",
-        "education_points",
-        "disability_points",
-        "illness_points",
-        "total_score",
     ]
 
     if not records:
         svg = _svg_start("Household Data Correlation Heatmap")
         svg += """
         <text x="400" y="250" text-anchor="middle"
-              font-family="Arial" font-size="18">
+              font-family="Arial" font-size="16">
             No household data available
         </text>
         """
@@ -333,7 +326,7 @@ def create_feature_relationship_chart(records):
         svg = _svg_start("Household Data Correlation Heatmap")
         svg += """
         <text x="400" y="250" text-anchor="middle"
-              font-family="Arial" font-size="18">
+              font-family="Arial" font-size="16">
             Not enough numeric features for correlation
         </text>
         """
@@ -399,7 +392,7 @@ def create_feature_relationship_chart(records):
         <text x="{chart_width / 2}" y="40"
               text-anchor="middle"
               font-family="Arial"
-              font-size="23"
+              font-size="16"
               font-weight="bold">
             Household Data Correlation Heatmap
         </text>
@@ -413,7 +406,7 @@ def create_feature_relationship_chart(records):
               y="{y + cell / 2 + 5}"
               text-anchor="end"
               font-family="Arial"
-              font-size="12">
+              font-size="14">
             {escape(row_name)}
         </text>
         """
@@ -452,7 +445,7 @@ def create_feature_relationship_chart(records):
                   y="{y + cell / 2 + 4}"
                   text-anchor="middle"
                   font-family="Arial"
-                  font-size="11">
+                  font-size="14">
                 {label}
             </text>
             """
@@ -460,14 +453,14 @@ def create_feature_relationship_chart(records):
     # X-axis labels.
     for col_index, col_name in enumerate(columns):
         x = left + col_index * cell + cell / 2
-        y = top - 10
+        y = top + 10
 
         svg += f"""
         <text x="{x}" y="{y}"
               text-anchor="end"
               transform="rotate(-45 {x} {y})"
               font-family="Arial"
-              font-size="11">
+              font-size="14">
             {escape(col_name)}
         </text>
         """
@@ -487,7 +480,7 @@ def create_feature_relationship_chart(records):
               y="{chart_height - 65}"
               text-anchor="middle"
               font-family="Arial"
-              font-size="11"
+              font-size="14"
               fill="#A33">
             {escape(missing_text)}
         </text>
