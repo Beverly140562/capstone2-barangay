@@ -17,6 +17,7 @@ import { api } from '../lib/api';
 
 function History() {
   const [history, setHistory] = useState([]);
+  const [calamityHistory, setCalamityHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -39,6 +40,7 @@ function History() {
     setLoading(true);
     setError('');
 
+    // REGULAR BENEFICIARY HISTORY
     const historyResponse = await api.get(
       '/history/beneficiary-validation'
     );
@@ -52,6 +54,20 @@ function History() {
           : [];
 
     setHistory(historyRecords);
+
+    // APPROVED CALAMITY BENEFICIARIES
+    const calamityResponse = await api.get(
+      '/calamity/approved-beneficiaries'
+    );
+
+    const calamityRecords = Array.isArray(
+      calamityResponse?.calamity_beneficiaries
+    )
+      ? calamityResponse.calamity_beneficiaries
+      : [];
+
+    setCalamityHistory(calamityRecords);
+
   } catch (err) {
     console.error('Failed to load history:', err);
 
@@ -605,6 +621,105 @@ const getDecisionMaker = (program) => {
           </div>
         )}
       </div>
+
+{/* ========================================================
+    CALAMITY PROGRAM BENEFICIARIES
+======================================================== */}
+<div className="mt-8 rounded-xl border border-gray-200 bg-white shadow-sm">
+
+  <div className="border-b border-gray-200 bg-[#FFF7F7] px-5 py-4">
+    <h2 className="text-3xl font-bold text-[#6E2430]">
+      Calamity Program Beneficiaries
+    </h2>
+
+    <p className="text-xl text-gray-500">
+      Households approved for calamity assistance.
+    </p>
+
+    <p className="mt-2 text-xl font-semibold text-[#6E2430]">
+      {calamityHistory.length} approved beneficiary
+      {calamityHistory.length !== 1 ? 'ies' : ''}
+    </p>
+  </div>
+
+  {loading ? (
+    <div className="flex justify-center py-12">
+      <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-[#6E2430]" />
+    </div>
+  ) : calamityHistory.length === 0 ? (
+    <div className="py-12 text-center">
+      <FileText
+        size={50}
+        className="mx-auto mb-3 text-gray-300"
+      />
+
+      <p className="text-xl font-semibold text-gray-500">
+        No approved calamity program beneficiaries found.
+      </p>
+    </div>
+  ) : (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[1100px] text-left">
+        <thead>
+          <tr className="border-b border-gray-200 text-xl text-gray-500">
+            <th className="px-5 py-4">Household Head</th>
+            <th className="px-5 py-4">Purok</th>
+            <th className="px-5 py-4">Calamity Program</th>
+            <th className="px-5 py-4">Risk Level</th>
+            <th className="px-5 py-4">Approved By</th>
+            <th className="px-5 py-4">Date Approved</th>
+            <th className="px-5 py-4">Status</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {calamityHistory.map((item) => (
+            <tr
+              key={item.calamity_id}
+              className="border-b border-gray-100 last:border-0 hover:bg-gray-50"
+            >
+              <td className="px-5 py-4 text-xl font-semibold text-gray-800">
+                {item.household_head_name ||
+                  item.household_name ||
+                  '—'}
+              </td>
+
+              <td className="px-5 py-4 text-xl text-gray-700">
+                {item.purok || '—'}
+              </td>
+
+              <td className="px-5 py-4 text-xl text-gray-700">
+                {item.program_name ||
+                  item.calamity_program ||
+                  '—'}
+              </td>
+
+              <td className="px-5 py-4 text-xl text-gray-700">
+                {item.risk_level || '—'}
+              </td>
+
+              <td className="px-5 py-4 text-xl text-gray-700">
+                {item.approved_by_name || '—'}
+              </td>
+
+              <td className="px-5 py-4 text-xl text-gray-600">
+                {formatDate(item.approved_at)}
+              </td>
+
+              <td className="px-5 py-4">
+                <span className="inline-flex items-center gap-2 rounded-full border border-green-200 bg-green-100 px-3 py-1 text-lg font-semibold text-green-700">
+                  <CheckCircle size={18} />
+                  Approved
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
+</div>
+
 
       {/* ========================================================
           HOUSEHOLD DETAILS MODAL

@@ -234,6 +234,84 @@ router.get(
   }
 );
 
+
+/*
+|--------------------------------------------------------------------------
+| GET APPROVED CALAMITY PROGRAM BENEFICIARIES
+| GET /calamity/approved-beneficiaries
+|--------------------------------------------------------------------------
+*/
+router.get(
+  '/approved-beneficiaries',
+  async (req, res) => {
+    try {
+      const rows = await query(`
+        SELECT
+          cp.calamity_id,
+          cp.household_id,
+          cp.household_name,
+
+          h.household_head_name,
+          h.purok,
+          h.address,
+          h.family_number,
+
+          cp.calamity_program,
+          cp.house_type,
+          cp.roof_damage,
+          cp.wall_damage,
+          cp.flooding_level,
+          cp.damage_risk,
+          cp.risk_level,
+
+          cp.status,
+          cp.approved_by,
+          cp.approved_at,
+          cp.rejection_reason,
+          cp.created_at,
+
+          u.full_name AS approved_by_name,
+
+          p.program_name,
+          p.description
+
+        FROM calamity_programs cp
+
+        LEFT JOIN households h
+          ON h.household_id = cp.household_id
+
+        LEFT JOIN users u
+          ON u.user_id = cp.approved_by
+
+        LEFT JOIN assistance_programs p
+          ON p.program_id = cp.program_id
+
+        WHERE cp.status = 'Approved'
+
+        ORDER BY cp.approved_at DESC NULLS LAST,
+                 cp.created_at DESC
+      `);
+
+      return res.json({
+        success: true,
+        calamity_beneficiaries: rows,
+      });
+
+    } catch (error) {
+      console.error(
+        'GET approved calamity beneficiaries ERROR:',
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          error.message ||
+          'Failed to load approved calamity beneficiaries.',
+      });
+    }
+  }
+);
+
 /*
 |--------------------------------------------------------------------------
 | GET ONE CALAMITY PROGRAM
