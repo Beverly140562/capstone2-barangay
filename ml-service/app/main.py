@@ -1322,27 +1322,19 @@ rf_vulnerability = display_vulnerability(rf_prediction)
 rf_probability = round(float(max(probabilities)), 4)
 
 # Probabilities for all Random Forest classes
-probability_result = {
-    str(label): round(float(prob), 4)
-    for label, prob in zip(classes, probabilities)
-}
-
-
-    # ========================================================
-    # FINAL VULNERABILITY CLASSIFICATION BASED ON INCOME
-    # ========================================================
+    probability_result = {
+        str(label): round(float(prob), 4)
+        for label, prob in zip(classes, probabilities)
+    }
 
     if household_income <= 10999:
         vulnerability = "High Vulnerable"
-
     elif household_income <= 24999:
         vulnerability = "Moderate Vulnerable"
-
     else:
         vulnerability = "Low Vulnerable"
 
-    classification_source = "Household Income Classification"
-
+        
     # ========================================================
     # PREPARE HOUSEHOLD FOR PROGRAM MATCHING
     # ========================================================
