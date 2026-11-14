@@ -19,8 +19,8 @@ const ELIGIBILITY_OPTIONS = [
   {
     group: 'Vulnerability Level',
     options: [
-      'Highly Vulnerable',
-      'Moderately Vulnerable',
+      'High Vulnerable',
+      'Moderate Vulnerable',
       'Low Vulnerable',
     ],
   },
@@ -46,13 +46,13 @@ const ELIGIBILITY_OPTIONS = [
 
 
 const RULE_MAP = {
-  'Highly Vulnerable': {
+  'High Vulnerable': {
     group: 'vulnerability',
-    value: 'Highly Vulnerable',
+    value: 'High Vulnerable',
   },
-  'Moderately Vulnerable': {
+  'Moderate Vulnerable': {
     group: 'vulnerability',
-    value: 'Moderately Vulnerable',
+    value: 'Moderate Vulnerable',
   },
   'Low Vulnerable': {
     group: 'vulnerability',
