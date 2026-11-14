@@ -160,7 +160,6 @@ function getPriority(vulnerability) {
   ).trim().toLowerCase();
 
   if (
-    value.includes('highly') ||
     value.includes('high')
   ) {
     return 'High';

@@ -72,7 +72,7 @@ export default function Suggestions() {
   const [generateCount, setGenerateCount] = useState('');
 
   const [vulnerabilityFilter, setVulnerabilityFilter] =
-    useState('Highly Vulnerable');
+    useState('High Vulnerable');
 
   // ==================================================
   // GENERATED HOUSEHOLDS
@@ -502,8 +502,8 @@ const normalizeSuggestedPrograms = (suggestedPrograms) => {
   if (!selectedProgramId) return [];
 
   const priority = {
-    'Highly Vulnerable': 1,
-    'Moderately Vulnerable': 2,
+    'High Vulnerable': 1,
+    'Moderate Vulnerable': 2,
     'Low Vulnerable': 3,
     'Not Vulnerable': 4,
   };
@@ -1229,12 +1229,12 @@ const handleAddAll = () => {
             All Vulnerable
           </option>
 
-          <option value="Highly Vulnerable">
-            Highly Vulnerable
+          <option value="High Vulnerable">
+            High Vulnerable
           </option>
 
-          <option value="Moderately Vulnerable">
-            Moderately Vulnerable
+          <option value="Moderate Vulnerable">
+            Moderate Vulnerable
           </option>
 
           <option value="Low Vulnerable">
@@ -1404,12 +1404,12 @@ const handleAddAll = () => {
                 }
                 className="mt-1 block rounded-md font-semibold border border-gray-600 px-3 py-2 text-xl text-black focus:outline-none focus:ring-2 focus:ring-brand"
               >
-                <option value="Highly Vulnerable">
-                  Highly Vulnerable
+                <option value="High Vulnerable">
+                  High Vulnerable
                 </option>
 
-                <option value="Moderately Vulnerable">
-                  Moderately Vulnerable
+                <option value="Moderate Vulnerable">
+                  Moderate Vulnerable
                 </option>
 
                 <option value="All Vulnerability Levels">
@@ -1629,7 +1629,7 @@ const handleAddAll = () => {
                           )
                             .toLowerCase()
                             .includes(
-                              'highly'
+                              'high'
                             )
                             ? 'text-alert'
                             : String(
@@ -1638,7 +1638,7 @@ const handleAddAll = () => {
                               )
                                 .toLowerCase()
                                 .includes(
-                                  'moderately'
+                                  'moderate'
                                 )
                             ? 'text-amber'
                             : 'text-success'
@@ -1914,11 +1914,11 @@ const handleAddAll = () => {
                       <span
                         className={`font-semibold ${
                           household.vulnerability?.includes(
-                            'Highly'
+                            'High Vulnerable'
                           )
                             ? 'text-alert'
                             : household.vulnerability?.includes(
-                                'Moderately'
+                                'Moderate Vulnerable'
                               )
                             ? 'text-amber'
                             : 'text-success'

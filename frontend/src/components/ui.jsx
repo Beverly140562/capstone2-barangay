@@ -74,7 +74,7 @@ export function statusTone(status = '') {
   if (s.includes('approved') || s.includes('active')) return 'success';
   if (s.includes('validated')) return 'amber';
   if (s.includes('reject') || s.includes('return')) return 'alert';
-  if (s.includes('high') || s.includes('highly')) return 'high';
+  if (s.includes('high') || s.includes('high')) return 'high';
   if (s.includes('medium') || s.includes('moderate')) return 'medium';
   if (s.includes('low') || s.includes('low')) return 'low';
   return 'await';
@@ -167,14 +167,3 @@ export function Spinner() {
   return <div className="flex justify-center py-10 text-gray-400">Loading…</div>;
 }
 
-export function BarChart({ title, rows }) {
-  const barColors = [
-    'bg-[#741F2D]',
-    'bg-[#2563EB]',
-    'bg-[#16A34A]',
-    'bg-[#D97706]',
-    'bg-[#7C3AED]',
-    'bg-[#DB2777]',
-    'bg-[#0891B2]',
-  ];
-}
