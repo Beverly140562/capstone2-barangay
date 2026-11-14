@@ -900,8 +900,8 @@ def match_programs(
                         item.title()
                         for item in legacy
                         if item in [
-                            "highly vulnerable",
-                            "moderately vulnerable",
+                            "high vulnerable",
+                            "moderate vulnerable",
                             "low vulnerable",
                         ]
                     ],
@@ -1029,8 +1029,8 @@ def display_vulnerability(label: str) -> str:
     """
 
     mapping = {
-        "High": "Highly Vulnerable",
-        "Medium": "Moderately Vulnerable",
+        "High": "High Vulnerable",
+        "Medium": "Moderate Vulnerable",
         "Low": "Low Vulnerable",
     }
 
@@ -1281,10 +1281,10 @@ def predict_one(
     # ========================================================
 
     if household_income <= 10999:
-        vulnerability = "Highly Vulnerable"
+        vulnerability = "High Vulnerable"
 
     elif household_income <= 24999:
-        vulnerability = "Moderately Vulnerable"
+        vulnerability = "Moderate Vulnerable"
 
     else:
         vulnerability = "Low Vulnerable"
