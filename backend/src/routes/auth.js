@@ -1,5 +1,5 @@
-const express = require('express');
 
+const express = require('express');
 const router = express.Router();
 
 const { query } = require('../db');
@@ -12,29 +12,39 @@ const {
 const { auth } = require('../middleware/auth');
 
 // --------------------------------------------------
-// LOGIN
+// LOGIN - EMAIL AND PASSWORD
 // --------------------------------------------------
+
 
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body || {};
 
-    if (!username || !password) {
+    const loginValue = String(username || '').trim();
+
+    if (!loginValue || !password) {
       return res.status(400).json({
-        error: 'Username and password are required.',
+        error: 'Username/email and password are required.',
       });
     }
 
+    // Find account using either username or email.
     const rows = await query(
-      'select * from users where lower(username) = lower($1)',
-      [username]
+      `
+      SELECT *
+      FROM users
+      WHERE LOWER(TRIM(username)) = LOWER($1)
+         OR LOWER(TRIM(email)) = LOWER($1)
+      LIMIT 1
+      `,
+      [loginValue]
     );
 
     const user = rows[0];
 
     if (!user || !comparePassword(password, user.password)) {
       return res.status(401).json({
-        error: 'Invalid username or password.',
+        error: 'Invalid username/email or password.',
       });
     }
 
@@ -44,49 +54,60 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // Update the last successful login date.
+    const assignedRole = String(user.roles || '')
+      .trim()
+      .toLowerCase();
+
+    if (!['admin', 'captain', 'staff'].includes(assignedRole)) {
+      return res.status(403).json({
+        error: 'Invalid account role. Contact the administrator.',
+      });
+    }
+
     await query(
-      `UPDATE users
-       SET visited_date = NOW()
-       WHERE user_id = $1`,
+      `UPDATE users SET visited_date = NOW() WHERE user_id = $1`,
       [user.user_id]
     );
 
-    const token = signToken(user);
+    const token = signToken({
+      ...user,
+      roles: assignedRole,
+    });
 
-    res.json({
+    return res.json({
       token,
       user: {
         user_id: user.user_id,
         username: user.username,
         full_name: user.full_name,
         email: user.email,
-        roles: user.roles,
+        roles: assignedRole,
+        role: assignedRole,
       },
     });
+
   } catch (e) {
     console.error('Login error:', e);
 
-    res.status(500).json({
+    return res.status(500).json({
       error: 'Server error during login.',
     });
   }
 });
 
 
+
 // --------------------------------------------------
 // CURRENT LOGGED-IN USER
 // --------------------------------------------------
+
 router.get('/me', auth, async (req, res) => {
   try {
-    // IMPORTANT:
-    // signToken() stores the user ID as "users",
-    // not "sub".
     const userId =
-  req.user?.users ??
-  req.user?.user_id ??
-  req.user?.id ??
-  req.user?.sub;
+      req.user?.users ??
+      req.user?.user_id ??
+      req.user?.id ??
+      req.user?.sub;
 
     if (!userId) {
       return res.status(401).json({
@@ -94,9 +115,10 @@ router.get('/me', auth, async (req, res) => {
       });
     }
 
+    // Always retrieve the latest role from the database.
     const rows = await query(
       `
-      select
+      SELECT
         user_id,
         username,
         full_name,
@@ -104,33 +126,49 @@ router.get('/me', auth, async (req, res) => {
         roles,
         account_status,
         date_created
-      from users
-      where user_id = $1
+      FROM users
+      WHERE user_id = $1
+      LIMIT 1
       `,
       [userId]
     );
 
-    if (!rows[0]) {
+    const currentUser = rows[0];
+
+    if (!currentUser) {
       return res.status(404).json({
         error: 'User not found.',
       });
     }
 
-    // If the account was deactivated after login,
-    // don't allow the session to continue.
-    if (!rows[0].account_status) {
+    if (!currentUser.account_status) {
       return res.status(403).json({
         error: 'This account has been deactivated.',
       });
     }
 
-    res.json({
-      user: rows[0],
+    const assignedRole = String(currentUser.roles || '')
+      .trim()
+      .toLowerCase();
+
+    if (!['admin', 'captain', 'staff'].includes(assignedRole)) {
+      return res.status(403).json({
+        error: 'Your account has no valid assigned role.',
+      });
+    }
+
+    return res.json({
+      user: {
+        ...currentUser,
+        roles: assignedRole,
+        role: assignedRole,
+      },
     });
+
   } catch (e) {
     console.error('Auth /me error:', e);
 
-    res.status(500).json({
+    return res.status(500).json({
       error: 'Server error.',
     });
   }

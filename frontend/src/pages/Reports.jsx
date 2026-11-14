@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import toast from 'react-hot-toast';
+import ExcelJS from 'exceljs';
 
 import { api } from '../lib/api';
 import { mlApi } from '../lib/mlApi';
@@ -971,10 +972,8 @@ function AnalyticsBarChart({
   );
 }
 
-function AnalyticsMiniTable({
-  title,
-  rows = [],
-}) {
+
+ function SummaryTable({ title, rows = [] }) {
   return (
     <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
       <div className="bg-[#FFD7D7] px-4 py-3 text-xl font-bold text-[#6E2430]">
@@ -984,22 +983,20 @@ function AnalyticsMiniTable({
       <table className="w-full">
         <tbody>
           {rows.length > 0 ? (
-            rows.map(
-              (row, index) => (
-                <tr
-                  key={`${row.label}-${index}`}
-                  className="border-t hover:bg-gray-50"
-                >
-                  <td className="px-4 py-3 text-xl text-gray-700">
-                    {row.label}
-                  </td>
+            rows.map((row, index) => (
+              <tr
+                key={`${row.label}-${index}`}
+                className="border-t hover:bg-gray-50"
+              >
+                <td className="px-4 py-3 text-xl text-gray-700">
+                  {row.label}
+                </td>
 
-                  <td className="px-4 py-3 text-right text-xl font-semibold text-black">
-                    {row.value}
-                  </td>
-                </tr>
-              )
-            )
+                <td className="px-4 py-3 text-right text-xl font-semibold text-black">
+                  {row.value}
+                </td>
+              </tr>
+            ))
           ) : (
             <tr className="border-t">
               <td
@@ -1654,6 +1651,73 @@ setRecords(finalRows);
       filename
     );
   };
+
+async function downloadExcelFile(rows, filename) {
+  try {
+    const workbook = new ExcelJS.Workbook();
+
+    workbook.creator = 'Barangay Luinab';
+    workbook.created = new Date();
+
+    const worksheet = workbook.addWorksheet('Report');
+
+    // Add report data.
+    rows.forEach((row) => {
+      worksheet.addRow(
+        row.map((value) => value ?? '')
+      );
+    });
+
+    // Format the header.
+    const header = worksheet.getRow(1);
+
+    header.font = {
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+      size: 11,
+    };
+
+    header.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF6E2430' },
+    };
+
+    header.alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+    };
+
+    header.height = 24;
+
+    // Set column widths.
+    worksheet.columns.forEach((column) => {
+      let maxLength = 12;
+
+      column.eachCell({ includeEmpty: true }, (cell) => {
+        maxLength = Math.max(
+          maxLength,
+          String(cell.value ?? '').length
+        );
+      });
+
+      column.width = Math.min(maxLength + 4, 40);
+    });
+
+    // Generate browser-compatible Excel file.
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+
+    triggerDownload(blob, filename);
+  } catch (error) {
+    console.error('Excel export error:', error);
+    throw error;
+  }
+}
+
 
   /* ======================================================
      SAVE HISTORY
@@ -2647,6 +2711,46 @@ try {
     ]);
   };
 
+
+const buildAnalyticsExcelRows = (analytics) => {
+  const data = getAnalyticsData(analytics);
+
+  const section = (title, headers, rows) => [
+    [title, ''],
+    headers,
+    ...rows.map((row) => [row.label, row.value]),
+    ['', ''],
+  ];
+
+  return [
+    ['ANALYTICAL SUMMARY', ''],
+    ['Metric', 'Value'],
+    ['Total Households', data.total_households],
+    ['Highly Vulnerable', data.highly_vulnerable],
+    ['Approved Households', data.approved_household_count],
+    ['Rejected', data.rejected_count],
+    ['Decided Households', data.decided_household_count],
+    ['Approval Rate', `${data.approval_rate}%`],
+    ['Coverage', `${data.coverage}%`],
+    ['',''],
+    ...section('HOUSEHOLDS BY PUROK', ['Purok', 'Households'], getAnalyticsPurokRows(data)),
+    ...section('HOUSEHOLDS BY VULNERABILITY', ['Classification', 'Households'], getAnalyticsVulnerabilityRows(data)),
+    ...section('VALIDATION OUTCOME', ['Outcome', 'Households'], getAnalyticsValidationRows(data)),
+  ];
+};
+
+const buildRecordsExcelRows = (rows, reportType) => {
+  const columns = getReportColumns(reportType);
+
+  return [
+    columns.map((column) => column.header),
+    ...rows.map((row) =>
+      columns.map((column) => column.value(row))
+    ),
+  ];
+};
+
+
   /* ======================================================
      DOWNLOAD CSV
      ====================================================== */
@@ -2836,6 +2940,85 @@ try {
       setBusy('');
     }
   };
+
+
+
+const downloadExcel = async (reportType = type, historyReport = null) => {
+  const isHistoryDownload = Boolean(historyReport);
+  const busyKey = `excel-${reportType}`;
+
+  if (!isHistoryDownload && !validateFilters()) return;
+  if (busy === busyKey) return;
+
+  setBusy(busyKey);
+
+  try {
+    let savedData;
+    let excelRows;
+
+    if (isHistoryDownload) {
+      savedData = getHistoryData(historyReport);
+
+      if (reportType === 'analytics') {
+        if (!savedData || typeof savedData !== 'object') {
+          throw new Error('No saved analytical data is available.');
+        }
+
+        excelRows = buildAnalyticsExcelRows(savedData);
+      } else {
+        if (!Array.isArray(savedData) || !savedData.length) {
+          throw new Error('No saved report data is available.');
+        }
+
+        excelRows = buildRecordsExcelRows(savedData, reportType);
+      }
+    } else {
+      if (reportType === 'analytics') {
+        if (!analyticsData) {
+          throw new Error('Please load the analytical summary first.');
+        }
+
+        savedData = analyticsData;
+        excelRows = buildAnalyticsExcelRows(analyticsData);
+      } else {
+        if (!selectedRecords.length) {
+          throw new Error('Please select at least one record.');
+        }
+
+        savedData = selectedRecords;
+        excelRows = buildRecordsExcelRows(selectedRecords, reportType);
+      }
+    }
+
+    const filename = `${reportType}-${isHistoryDownload ? 'history-' : ''}${Date.now()}.xlsx`;
+
+    await downloadExcelFile(excelRows, filename, reportType);
+
+    toast.success('Excel file downloaded successfully.');
+
+    if (!isHistoryDownload) {
+      try {
+        await saveReportHistory({
+          reportType,
+          format: 'EXCEL',
+          filters: getEffectiveFilters(),
+          reportData: savedData,
+        });
+
+        await load();
+      } catch (historyError) {
+        console.error('Failed to save Excel report history:', historyError);
+        toast.error('Excel downloaded, but report history could not be saved.');
+      }
+    }
+  } catch (error) {
+    console.error('Excel download error:', error);
+    toast.error(error?.message || 'Failed to download Excel report.');
+  } finally {
+    setBusy('');
+  }
+};
+
 
   /* ======================================================
      RENDER
@@ -3053,23 +3236,13 @@ try {
               </Button>
 
               <Button
-                type="button"
-                variant="maroon"
-                disabled={
-                  busy ===
-                  'csv-analytics'
-                }
-                onClick={() =>
-                  downloadCsv(
-                    'analytics'
-                  )
-                }
-              >
-                {busy ===
-                'csv-analytics'
-                  ? 'Preparing…'
-                  : 'Generate CSV'}
-              </Button>
+  type="button"
+  variant="maroon"
+  disabled={busy === 'excel-analytics'}
+  onClick={() => downloadExcel('analytics')}
+>
+  {busy === 'excel-analytics' ? 'Preparing…' : 'Download Excel'}
+</Button>
             </div>
           </Band>
         )}
@@ -3337,21 +3510,13 @@ try {
                         </button>
 
                         <button
-                          type="button"
-                          className="text-xl font-semibold text-[#6E2430] hover:underline disabled:opacity-50"
-                          disabled={
-                            busy ===
-                            `csv-${report.report_type}`
-                          }
-                          onClick={() =>
-                            downloadCsv(
-                              report.report_type,
-                              report
-                            )
-                          }
-                        >
-                          Download CSV
-                        </button>
+  type="button"
+  disabled={busy === `excel-${report.report_type}`}
+  onClick={() => downloadExcel(report.report_type, report)}
+  className="text-xl font-semibold text-[#6E2430] hover:underline disabled:opacity-50"
+>
+  {busy === `excel-${report.report_type}` ? 'Preparing…' : 'Download Excel'}
+</button>
                       </div>
                     </td>
                   </tr>
@@ -3620,24 +3785,13 @@ try {
 
             <div className="flex flex-wrap justify-end gap-3 border-t bg-gray-50 px-6 py-4">
               <Button
-                type="button"
-                variant="maroon"
-                disabled={
-                  busy ===
-                  `csv-${viewingReport.report_type}`
-                }
-                onClick={() =>
-                  downloadCsv(
-                    viewingReport.report_type,
-                    viewingReport
-                  )
-                }
-              >
-                {busy ===
-                `csv-${viewingReport.report_type}`
-                  ? 'Preparing…'
-                  : 'Download CSV'}
-              </Button>
+  type="button"
+  variant="maroon"
+  disabled={busy === `excel-${viewingReport.report_type}`}
+  onClick={() => downloadExcel(viewingReport.report_type, viewingReport)}
+>
+  {busy === `excel-${viewingReport.report_type}` ? 'Preparing…' : 'Download Excel'}
+</Button>
 
               <Button
                 type="button"

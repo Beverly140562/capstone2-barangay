@@ -411,7 +411,7 @@ export default function Users() {
                       {u.visited_date ? formatDate(u.visited_date) : 'Never logged in'}
                     </td>
 
-                    <td className="px-3 py-2">
+                    <td className="px-2 py-2">
                       <div className="flex flex-wrap gap-2">
 
                         <Button

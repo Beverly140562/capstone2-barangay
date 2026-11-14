@@ -13,5 +13,10 @@
   },
   "dependencies": {
     "lucide-react": "^1.31.0"
+  },
+  "overrides": {
+  "exceljs": {
+    "uuid": "11.1.1"
   }
+}
 }
