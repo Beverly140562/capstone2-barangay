@@ -37,81 +37,141 @@ function History() {
   // GET /api/history
   // ============================================================
   const loadHistory = async () => {
+  setLoading(true);
+  setError('');
+
   try {
-    setLoading(true);
-    setError('');
+    const [historyResult, calamityResult] = await Promise.allSettled([
+      api.get('/history/beneficiary-validation'),
+      api.get('/calamity/approved-beneficiaries'),
+    ]);
 
-    // REGULAR BENEFICIARY HISTORY
-    const historyResponse = await api.get(
-      '/history/beneficiary-validation'
-    );
+    // REGULAR BENEFICIARY RECORDS
+    if (historyResult.status === 'fulfilled') {
+      const response = historyResult.value;
 
-    const historyRecords = Array.isArray(historyResponse)
-      ? historyResponse
-      : Array.isArray(historyResponse?.data)
-        ? historyResponse.data
-        : Array.isArray(historyResponse?.rows)
-          ? historyResponse.rows
-          : [];
+      const records = Array.isArray(response)
+        ? response
+        : response?.data ||
+          response?.rows ||
+          response?.validations ||
+          [];
 
-    setHistory(historyRecords);
+      setHistory(Array.isArray(records) ? records : []);
+    } else {
+      console.error(
+        'Failed to load regular beneficiary history:',
+        historyResult.reason
+      );
+      setHistory([]);
+    }
 
     // APPROVED CALAMITY BENEFICIARIES
-    const calamityResponse = await api.get(
-      '/calamity/approved-beneficiaries'
-    );
+    if (calamityResult.status === 'fulfilled') {
+      const response = calamityResult.value;
 
-    const calamityRecords = Array.isArray(
-      calamityResponse?.calamity_beneficiaries
-    )
-      ? calamityResponse.calamity_beneficiaries
-      : [];
+      const records = Array.isArray(response)
+        ? response
+        : response?.calamity_beneficiaries ||
+          response?.data ||
+          response?.rows ||
+          [];
 
-    setCalamityHistory(calamityRecords);
+      setCalamityHistory(Array.isArray(records) ? records : []);
+    } else {
+      console.error(
+        'Failed to load calamity beneficiaries:',
+        calamityResult.reason
+      );
+      setCalamityHistory([]);
+    }
 
+    if (
+      historyResult.status === 'rejected' &&
+      calamityResult.status === 'rejected'
+    ) {
+      setError('Failed to load beneficiary history. Please try again.');
+    }
   } catch (err) {
     console.error('Failed to load history:', err);
-
-    setError(
-      err?.message || 'Failed to load beneficiary history.'
-    );
+    setError(err?.message || 'Failed to load beneficiary history.');
   } finally {
     setLoading(false);
   }
 };
+
+// ============================================================
+// COMBINE REGULAR AND CALAMITY BENEFICIARY RECORDS
+// ============================================================
+const combinedHistory = useMemo(() => {
+  const regularRecords = history.map((item) => ({
+    ...item,
+    record_type: 'Regular',
+    validation_id:
+      item.validation_id || `regular-${item.household_id}-${item.program_name}`,
+    validation_status: item.validation_status || item.status || 'Pending',
+  }));
+
+  const calamityRecords = calamityHistory.map((item) => ({
+    ...item,
+
+    // Use a unique ID so React can distinguish records.
+    validation_id: `calamity-${item.calamity_id}`,
+
+    // Normalize calamity fields to match regular beneficiary fields.
+    validation_status: item.status || 'Approved',
+
+    record_type: 'Calamity',
+
+    remarks:
+      item.rejection_reason ||
+      (item.risk_level
+        ? `Calamity assistance - Risk Level: ${item.risk_level}`
+        : 'Calamity assistance'),
+
+    description: item.description || 'Calamity assistance',
+  }));
+
+  return [...regularRecords, ...calamityRecords];
+}, [history, calamityHistory]);
+
+
   // ============================================================
   // FILTER
   // ============================================================
-  const filteredHistory = useMemo(() => {
-    const searchText = search.toLowerCase().trim();
+  // ============================================================
+// FILTER
+// ============================================================
+const filteredHistory = useMemo(() => {
+  const searchText = search.toLowerCase().trim();
 
-    return history.filter((item) => {
-      const status = String(
-        item.validation_status || ''
-      ).toLowerCase();
+  return combinedHistory.filter((item) => {
+    const status = String(
+      item.validation_status || ''
+    ).toLowerCase();
 
-      const matchesStatus =
-        statusFilter === 'All' ||
-        status === statusFilter.toLowerCase();
+    const matchesStatus =
+      statusFilter === 'All' ||
+      status === statusFilter.toLowerCase();
 
-      const matchesSearch =
-        !searchText ||
-        String(item.household_head_name || '')
-          .toLowerCase()
-          .includes(searchText) ||
-        String(item.purok || '')
-          .toLowerCase()
-          .includes(searchText) ||
-        String(item.address || '')
-          .toLowerCase()
-          .includes(searchText) ||
-        String(item.program_name || '')
-          .toLowerCase()
-          .includes(searchText);
+    const matchesSearch =
+      !searchText ||
+      String(item.household_head_name || '')
+        .toLowerCase()
+        .includes(searchText) ||
+      String(item.purok || '')
+        .toLowerCase()
+        .includes(searchText) ||
+      String(item.address || '')
+        .toLowerCase()
+        .includes(searchText) ||
+      String(item.program_name || '')
+        .toLowerCase()
+        .includes(searchText);
 
-      return matchesStatus && matchesSearch;
-    });
-  }, [history, statusFilter, search]);
+    return matchesStatus && matchesSearch;
+  });
+}, [combinedHistory, statusFilter, search]);
 
   // ============================================================
   // GROUP BY HOUSEHOLD
@@ -247,17 +307,18 @@ const getDecisionMaker = (program) => {
   // ============================================================
   // COUNTS
   // ============================================================
-  const approvedCount = history.filter(
-    (item) =>
-      String(item.validation_status || '').toLowerCase() ===
-      'approved'
-  ).length;
+  // ============================================================
+// COUNTS
+// ============================================================
+const approvedCount = combinedHistory.filter(
+  (item) =>
+    String(item.validation_status || '').toLowerCase() === 'approved'
+).length;
 
-  const rejectedCount = history.filter(
-    (item) =>
-      String(item.validation_status || '').toLowerCase() ===
-      'rejected'
-  ).length;
+const rejectedCount = combinedHistory.filter(
+  (item) =>
+    String(item.validation_status || '').toLowerCase() === 'rejected'
+).length;
 
   // ============================================================
   // RENDER
@@ -322,7 +383,7 @@ const getDecisionMaker = (program) => {
               </p>
 
               <p className="mt-1 text-4xl font-bold text-[#6E2430]">
-                {history.length}
+                {combinedHistory.length}
               </p>
             </div>
 
@@ -590,8 +651,16 @@ const getDecisionMaker = (program) => {
 
                                 {/* PROGRAM */}
                                 <td className="px-4 py-4 text-xl font-semibold text-gray-800">
-                                  {program.program_name || '—'}
-                                </td>
+  <div className="flex flex-col items-start gap-2">
+    <span>{program.program_name || '—'}</span>
+
+    {program.record_type === 'Calamity' && (
+      <span className="rounded-full border border-orange-200 bg-orange-100 px-3 py-1 text-sm font-semibold text-orange-700">
+        Calamity Assistance
+      </span>
+    )}
+  </div>
+</td>
 
                                 {/* STATUS */}
                                 <td className="px-4 py-4">
@@ -804,6 +873,71 @@ const getDecisionMaker = (program) => {
                   </div>
                 ))}
 
+                {/* CALAMITY DAMAGE DETAILS */}
+{program.record_type === 'Calamity' && (
+  <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 p-4">
+    <p className="mb-3 text-xl font-bold text-orange-800">
+      Calamity Damage Information
+    </p>
+
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div>
+        <p className="text-lg font-semibold text-gray-500">
+          Risk Level
+        </p>
+        <p className="text-xl text-gray-800">
+          {program.risk_level || '—'}
+        </p>
+      </div>
+
+      <div>
+        <p className="text-lg font-semibold text-gray-500">
+          House Type
+        </p>
+        <p className="text-xl text-gray-800">
+          {program.house_type || '—'}
+        </p>
+      </div>
+
+      <div>
+        <p className="text-lg font-semibold text-gray-500">
+          Roof Damage
+        </p>
+        <p className="text-xl text-gray-800">
+          {program.roof_damage || '—'}
+        </p>
+      </div>
+
+      <div>
+        <p className="text-lg font-semibold text-gray-500">
+          Wall Damage
+        </p>
+        <p className="text-xl text-gray-800">
+          {program.wall_damage || '—'}
+        </p>
+      </div>
+
+      <div>
+        <p className="text-lg font-semibold text-gray-500">
+          Flooding Level
+        </p>
+        <p className="text-xl text-gray-800">
+          {program.flooding_level || '—'}
+        </p>
+      </div>
+
+      <div>
+        <p className="text-lg font-semibold text-gray-500">
+          Damage Risk Score
+        </p>
+        <p className="text-xl text-gray-800">
+          {program.damage_risk ?? '—'}
+        </p>
+      </div>
+    </div>
+  </div>
+)}
+
               </div>
             </div>
 
@@ -812,210 +946,6 @@ const getDecisionMaker = (program) => {
       )}
 
 
-{/* ========================================================
-    CALAMITY HOUSEHOLD DETAILS MODAL
-======================================================== */}
-{selectedCalamityHousehold && (
-  <div
-    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-    onClick={() => setSelectedCalamityHousehold(null)}
-  >
-    <div
-      className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
-      onClick={(e) => e.stopPropagation()}
-    >
-
-      {/* HEADER */}
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white px-6 py-5">
-
-        <div>
-          <h2 className="text-3xl font-bold text-[#6E2430]">
-            Household Details
-          </h2>
-
-          <p className="text-xl text-gray-500">
-            Calamity assistance program history
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setSelectedCalamityHousehold(null)}
-          className="rounded-full p-2 text-gray-500 hover:bg-gray-100"
-        >
-          <X size={30} />
-        </button>
-
-      </div>
-
-      {/* HOUSEHOLD INFORMATION */}
-      <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
-
-        <div className="rounded-lg bg-gray-50 p-4">
-          <p className="text-xl text-gray-500">
-            Household Head
-          </p>
-
-          <p className="mt-1 text-xl font-bold text-gray-800">
-            {selectedCalamityHousehold.household_head_name || '—'}
-          </p>
-        </div>
-
-        <div className="rounded-lg bg-gray-50 p-4">
-          <p className="text-xl text-gray-500">
-            Purok
-          </p>
-
-          <p className="mt-1 text-xl font-bold text-gray-800">
-            {selectedCalamityHousehold.purok || '—'}
-          </p>
-        </div>
-
-        <div className="rounded-lg bg-gray-50 p-4">
-          <p className="text-xl text-gray-500">
-            Address
-          </p>
-
-          <p className="mt-1 text-xl font-bold text-gray-800">
-            {selectedCalamityHousehold.address || '—'}
-          </p>
-        </div>
-
-      </div>
-
-      {/* CALAMITY PROGRAM HISTORY */}
-      <div className="px-6 pb-6">
-
-        <h3 className="mb-3 text-2xl font-bold text-[#6E2430]">
-          Calamity Program History
-        </h3>
-
-        <div className="space-y-3">
-
-          {selectedCalamityHousehold.programs.map((program) => (
-            <div
-              key={program.calamity_id}
-              className="rounded-xl border border-gray-200 p-4"
-            >
-
-              <div className="flex flex-col text-xl gap-3 md:flex-row md:items-start md:justify-between">
-
-                <div>
-
-                  <p className="font-bold text-gray-800">
-                    {program.program_name || '—'}
-                  </p>
-
-                  <p className="mt-1 text-xl text-gray-500">
-                    Approved by:{' '}
-                    <span className="font-medium text-gray-700">
-                      {program.approved_by_name || '—'}
-                    </span>
-                  </p>
-
-                  <p className="text-xl text-gray-500">
-                    Date:{' '}
-                    {formatDate(program.approved_at)}
-                  </p>
-
-                </div>
-
-                <span
-                  className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xl font-semibold ${getStatusStyle(
-                    program.status
-                  )}`}
-                >
-                  {getStatusIcon(program.status)}
-                  {program.status || '—'}
-                </span>
-
-              </div>
-
-              {/* DAMAGE DETAILS */}
-              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-lg font-semibold uppercase text-gray-500">
-                    Risk Level
-                  </p>
-
-                  <p className="mt-1 text-xl text-gray-700">
-                    {program.risk_level || '—'}
-                  </p>
-                </div>
-
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-lg font-semibold uppercase text-gray-500">
-                    House Type
-                  </p>
-
-                  <p className="mt-1 text-xl text-gray-700">
-                    {program.house_type || '—'}
-                  </p>
-                </div>
-
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-lg font-semibold uppercase text-gray-500">
-                    Roof Damage
-                  </p>
-
-                  <p className="mt-1 text-xl text-gray-700">
-                    {program.roof_damage || '—'}
-                  </p>
-                </div>
-
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-lg font-semibold uppercase text-gray-500">
-                    Wall Damage
-                  </p>
-
-                  <p className="mt-1 text-xl text-gray-700">
-                    {program.wall_damage || '—'}
-                  </p>
-                </div>
-
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-lg font-semibold uppercase text-gray-500">
-                    Flooding Level
-                  </p>
-
-                  <p className="mt-1 text-xl text-gray-700">
-                    {program.flooding_level || '—'}
-                  </p>
-                </div>
-
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-lg font-semibold uppercase text-gray-500">
-                    Damage Risk Score
-                  </p>
-
-                  <p className="mt-1 text-xl text-gray-700">
-                    {program.damage_risk ?? '—'}
-                  </p>
-                </div>
-
-              </div>
-
-              {/* REMARKS */}
-              <div className="mt-3 rounded-lg bg-gray-50 p-3">
-                <p className="text-xl font-semibold uppercase text-gray-500">
-                  Remarks
-                </p>
-
-                <p className="mt-1 text-xl text-gray-700">
-                  {program.rejection_reason || 'No remarks'}
-                </p>
-              </div>
-
-            </div>
-          ))}
-
-        </div>
-      </div>
-
-    </div>
-  </div>
-)}
 
 
     </div>

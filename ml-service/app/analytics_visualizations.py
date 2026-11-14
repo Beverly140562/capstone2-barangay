@@ -46,7 +46,7 @@ def create_vulnerability_chart(records):
         label = str(row.get("vulnerability") or "Not Classified")
         counts[label] = counts.get(label, 0) + 1
 
-    svg = _svg_start("Household Vulnerability Distribution")
+    svg = _svg_start("")
 
     if not counts:
         svg += '''
@@ -98,7 +98,7 @@ def create_income_chart(records):
         if value is not None and value >= 0:
             values.append(value)
 
-    svg = _svg_start("Household Monthly Income Distribution")
+    svg = _svg_start("")
 
     if not values:
         svg += '''
@@ -306,7 +306,7 @@ def create_feature_relationship_chart(records):
         "family_size": ["Family Size"],
     }
 
-    title = "Household Data Correlation Heatmap"
+    title = ""
 
     if not records:
         svg = _svg_start(title)

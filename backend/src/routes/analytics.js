@@ -169,23 +169,48 @@ router.get('/summary', async (req, res) => {
 /*
 |--------------------------------------------------------------------------
 | GET APPROVED HOUSEHOLDS PER ASSISTANCE PROGRAM
+| Includes regular and calamity approvals
 |--------------------------------------------------------------------------
 */
-
 router.get('/distribution', async (req, res) => {
   try {
     const result = await query(`
+      WITH approved_program_households AS (
+        -- Regular beneficiary approvals
+        SELECT
+          bv.program_id,
+          bv.household_id
+        FROM beneficiary_validation bv
+        WHERE LOWER(
+          TRIM(COALESCE(bv.validation_status, ''))
+        ) = 'approved'
+
+        UNION
+
+        -- Calamity beneficiary approvals
+        SELECT
+          cp.program_id,
+          cp.household_id
+        FROM calamity_programs cp
+        WHERE LOWER(
+          TRIM(COALESCE(cp.status, ''))
+        ) = 'approved'
+      )
+
       SELECT
         p.program_id,
         p.program_name,
-        COUNT(DISTINCT bv.household_id)::int AS approved_households
+        COUNT(DISTINCT aph.household_id)::int
+          AS approved_households
       FROM assistance_programs p
-      LEFT JOIN beneficiary_validation bv
-        ON bv.program_id = p.program_id
-        AND LOWER(TRIM(COALESCE(bv.validation_status, ''))) = 'approved'
+
+      LEFT JOIN approved_program_households aph
+        ON aph.program_id = p.program_id
+
       GROUP BY
         p.program_id,
         p.program_name
+
       ORDER BY
         approved_households DESC,
         p.program_name ASC
@@ -199,11 +224,16 @@ router.get('/distribution', async (req, res) => {
       distribution: rows.map((row) => ({
         program_id: row.program_id,
         program_name: row.program_name,
-        approved_households: Number(row.approved_households || 0),
+        approved_households: Number(
+          row.approved_households || 0
+        ),
       })),
     });
   } catch (error) {
-    console.error('GET /analytics/distribution error:', error);
+    console.error(
+      'GET /analytics/distribution error:',
+      error
+    );
 
     res.status(500).json({
       error: error.message,
@@ -397,83 +427,121 @@ router.get('/analytics', async (req, res) => {
       n: Number(row.n),
     }));
 
+   // -------------------------------------------------------
+// APPROVED HOUSEHOLDS PER PROGRAM
+// Includes regular and calamity approvals.
+// Applies the selected date and Purok filters.
+// -------------------------------------------------------
+
+const distributionResult = await query(
+  `
+  WITH approved_program_households AS (
+    -- Regular beneficiary approvals
+    SELECT
+      bv.program_id,
+      bv.household_id
+    FROM beneficiary_validation bv
+    WHERE LOWER(
+      TRIM(COALESCE(bv.validation_status, ''))
+    ) = 'approved'
+
+    UNION
+
+    -- Calamity beneficiary approvals
+    SELECT
+      cp.program_id,
+      cp.household_id
+    FROM calamity_programs cp
+    WHERE LOWER(
+      TRIM(COALESCE(cp.status, ''))
+    ) = 'approved'
+  )
+
+  SELECT
+    p.program_id,
+    p.program_name,
+    COUNT(DISTINCT h.household_id)::int
+      AS approved_households
+
+  FROM assistance_programs p
+
+  LEFT JOIN approved_program_households aph
+    ON aph.program_id = p.program_id
+
+  LEFT JOIN households h
+    ON h.household_id = aph.household_id
+    ${householdJoinConditions}
+
+  GROUP BY
+    p.program_id,
+    p.program_name
+
+  ORDER BY
+    approved_households DESC,
+    p.program_name ASC
+  `,
+  values
+);
+
+const distributionRows = Array.isArray(distributionResult)
+  ? distributionResult
+  : distributionResult?.rows || [];
+
+const distribution = distributionRows.map((row) => ({
+  program_id: row.program_id,
+  program_name: row.program_name,
+  approved_households: Number(
+    row.approved_households || 0
+  ),
+}));
+
     // -------------------------------------------------------
-    // APPROVED HOUSEHOLDS PER PROGRAM
-    // -------------------------------------------------------
+// TOTAL DISTINCT APPROVED HOUSEHOLDS
+// Includes regular and calamity approvals.
+// -------------------------------------------------------
 
-    const distributionResult = await query(
-      `
-      SELECT
-        p.program_id,
-        p.program_name,
+const approvedResult = await query(
+  `
+  WITH approved_households AS (
+    -- Regular beneficiary approvals
+    SELECT
+      bv.household_id
+    FROM beneficiary_validation bv
+    WHERE LOWER(
+      TRIM(COALESCE(bv.validation_status, ''))
+    ) = 'approved'
 
-        COUNT(DISTINCT h.household_id)::int
-          AS approved_households
+    UNION
 
-      FROM assistance_programs p
+    -- Calamity beneficiary approvals
+    SELECT
+      cp.household_id
+    FROM calamity_programs cp
+    WHERE LOWER(
+      TRIM(COALESCE(cp.status, ''))
+    ) = 'approved'
+  )
 
-      LEFT JOIN beneficiary_validation bv
-        ON bv.program_id = p.program_id
-        AND LOWER(
-          TRIM(COALESCE(bv.validation_status, ''))
-        ) = 'approved'
+  SELECT
+    COUNT(DISTINCT h.household_id)::int AS total
 
-      LEFT JOIN households h
-        ON h.household_id = bv.household_id
-        ${householdJoinConditions}
+  FROM approved_households ah
 
-      GROUP BY
-        p.program_id,
-        p.program_name
+  INNER JOIN households h
+    ON h.household_id = ah.household_id
 
-      ORDER BY
-        approved_households DESC,
-        p.program_name
-      `,
-      values
-    );
+  ${householdWhere}
+  `,
+  values
+);
 
-    const distributionRows = Array.isArray(distributionResult)
-      ? distributionResult
-      : distributionResult?.rows || [];
+const approvedRows = Array.isArray(approvedResult)
+  ? approvedResult
+  : approvedResult?.rows || [];
 
-    const distribution = distributionRows.map((row) => ({
-      program_id: row.program_id,
-      program_name: row.program_name,
-      approved_households: Number(
-        row.approved_households || 0
-      ),
-    }));
-
-    // -------------------------------------------------------
-    // TOTAL DISTINCT APPROVED HOUSEHOLDS
-    // -------------------------------------------------------
-
-    const approvedResult = await query(
-      `
-      SELECT
-        COUNT(DISTINCT h.household_id)::int AS total
-      FROM beneficiary_validation bv
-      INNER JOIN households h
-        ON h.household_id = bv.household_id
-      WHERE LOWER(
-        TRIM(COALESCE(bv.validation_status, ''))
-      ) = 'approved'
-      ${conditions.length
-        ? `AND ${conditions.join(' AND ')}`
-        : ''
-      }
-      `,
-      values
-    );
-
-    const approvedRows = Array.isArray(approvedResult)
-      ? approvedResult
-      : approvedResult?.rows || [];
-
-    const approved_household_count = Number(
-      approvedRows[0]?.total || 0
-    );
+const approved_household_count = Number(
+  approvedRows[0]?.total || 0
+);
 
     // -------------------------------------------------------
     // HIGHLY VULNERABLE
