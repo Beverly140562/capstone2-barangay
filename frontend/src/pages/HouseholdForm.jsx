@@ -1035,14 +1035,46 @@ if (incomeProofFiles.length > 0) {
       // SUCCESS
       // --------------------------------------------------------
 
-      toast.success(
-        editId
-          ? 'Household information updated successfully.'
-          : 'Household successfully saved.'
-      );
+      
+// --------------------------------------------------------
+// AUTOMATICALLY REFRESH RANDOM FOREST PREDICTION
+// --------------------------------------------------------
 
+let predictionUpdated = false;
 
-      navigate('/households');
+try {
+  await api.post(
+    `/households/${encodeURIComponent(householdId)}/predict`
+  );
+
+  predictionUpdated = true;
+
+  console.log('Household vulnerability prediction refreshed.');
+} catch (predictionError) {
+  console.error(
+    'Automatic vulnerability prediction failed:',
+    predictionError
+  );
+}
+
+// --------------------------------------------------------
+// SUCCESS
+// --------------------------------------------------------
+
+if (predictionUpdated) {
+  toast.success(
+    editId
+      ? 'Household updated and vulnerability classification refreshed.'
+      : 'Household saved and vulnerability classification generated.'
+  );
+} else {
+  toast.error(
+    'Household saved, but vulnerability classification could not be refreshed. Please try again.'
+  );
+}
+
+navigate('/households');
+
 
     } catch (err) {
 

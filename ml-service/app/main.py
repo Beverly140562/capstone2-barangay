@@ -977,6 +977,10 @@ def match_programs(
                 condition_results.append(
                     family_size is not None and family_size >= 5
                 )
+            elif condition == "family_size_gte_4":
+                condition_results.append(
+                    family_size is not None and family_size >= 4
+                )
 
             else:
                 # Unknown conditions must not qualify.
@@ -1258,31 +1262,30 @@ def predict_one(
     # RANDOM FOREST PREDICTION
     # ========================================================
 
-    prediction = _model.predict(input_df)[0]
+    # Keep the original Random Forest prediction for reference
+rf_prediction = str(_model.predict(input_df)[0])
+probabilities = _model.predict_proba(input_df)[0]
+classes = _model.classes_
 
-    probabilities = _model.predict_proba(input_df)[0]
+rf_vulnerability = display_vulnerability(rf_prediction)
+rf_probability = round(float(max(probabilities)), 4)
 
-    classes = _model.classes_
+probability_result = {
+    str(label): round(float(prob), 4)
+    for label, prob in zip(classes, probabilities)
+}
 
-    probability_result = {
-        str(label): round(float(prob), 4)
-        for label, prob in zip(classes, probabilities)
-    }
+# Final vulnerability classification based on TOTAL HOUSEHOLD INCOME
+if household_income <= 10999:
+    vulnerability = "Highly Vulnerable"
 
-    rf_label = str(prediction)
+elif household_income <= 24999:
+    vulnerability = "Moderately Vulnerable"
 
-    vulnerability = display_vulnerability(rf_label)
+else:
+    vulnerability = "Low Vulnerable"
 
-    rf_probability = round(
-        float(max(probabilities)),
-        4,
-    )
-
-    # IMPORTANT:
-    # Do not override the Random Forest classification
-    # using household income thresholds.
-
-    classification_source = "Random Forest"
+classification_source = "Household Income Classification"
 
     # ========================================================
     # PREPARE HOUSEHOLD FOR PROGRAM MATCHING
@@ -1322,28 +1325,19 @@ def predict_one(
     # ========================================================
 
     return {
-        "vulnerability": vulnerability,
-        "vulnerability_prob": rf_probability,
-
-        "rf_vulnerability": vulnerability,
-        "rf_vulnerability_prob": rf_probability,
-
-        "classification_source": classification_source,
-
-        "household_composition": composition,
-
-        "member_count": member_count,
-        "family_size": family_size,
-        "household_monthly_income": household_income,
-
-        "program_eligible": (
-            True if suggested_programs else None
-        ),
-
-        "suggested_programs": suggested_programs,
-
-        "probabilities": probability_result,
-    }
+    "vulnerability": vulnerability,
+    "vulnerability_prob": None,
+    "rf_vulnerability": rf_vulnerability,
+    "rf_vulnerability_prob": rf_probability,
+    "classification_source": classification_source,
+    "household_composition": composition,
+    "member_count": member_count,
+    "family_size": family_size,
+    "household_monthly_income": household_income,
+    "program_eligible": True if suggested_programs else None,
+    "suggested_programs": suggested_programs,
+    "probabilities": probability_result,
+}
 
 # ============================================================
 # ROOT
