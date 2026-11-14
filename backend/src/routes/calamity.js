@@ -235,6 +235,7 @@ router.get(
 );
 
 
+
 /*
 |--------------------------------------------------------------------------
 | GET APPROVED CALAMITY PROGRAM BENEFICIARIES
@@ -249,14 +250,12 @@ router.get(
         SELECT
           cp.calamity_id,
           cp.household_id,
+          cp.program_id,
 
           h.household_head_name,
           h.purok,
           h.address,
           h.family_number,
-
-          cp.calamity_program,
-          cp.program_id,
 
           cp.house_type,
           cp.roof_damage,
@@ -306,14 +305,14 @@ router.get(
       );
 
       return res.status(500).json({
-        error:
-          error.message ||
-          'Failed to load approved calamity beneficiaries.',
+        error: error.message || 'Failed to load approved calamity beneficiaries.',
         code: error.code || null,
+        detail: error.detail || null,
       });
     }
   }
 );
+
 
 /*
 |--------------------------------------------------------------------------

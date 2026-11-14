@@ -679,9 +679,7 @@ const getDecisionMaker = (program) => {
               className="border-b border-gray-100 last:border-0 hover:bg-gray-50"
             >
               <td className="px-5 py-4 text-xl font-semibold text-gray-800">
-                {item.household_head_name ||
-                  item.household_name ||
-                  '—'}
+                {item.household_head_name || '—'}
               </td>
 
               <td className="px-5 py-4 text-xl text-gray-700">
@@ -689,9 +687,7 @@ const getDecisionMaker = (program) => {
               </td>
 
               <td className="px-5 py-4 text-xl text-gray-700">
-                {item.program_name ||
-                  item.calamity_program ||
-                  '—'}
+                {item.program_name || '—'}
               </td>
 
               <td className="px-5 py-4 text-xl text-gray-700">
