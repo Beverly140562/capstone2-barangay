@@ -137,15 +137,13 @@ function vulnerabilityTone(vulnerability) {
     .toLowerCase();
 
   if (
-    value.includes('high') ||
-    value.includes('highly')
+    value.includes('high')
   ) {
     return 'high';
   }
 
   if (
-    value.includes('moderate') ||
-    value.includes('medium')
+    value.includes('moderate')
   ) {
     return 'medium';
   }
@@ -406,8 +404,8 @@ function isPriorityHousehold(household) {
       'true',
       'priority',
       'high',
-      'highly vulnerable',
-      'highly vulnerable household',
+      'high vulnerable',
+      'high vulnerable household',
     ].includes(
       priorityValue
         .trim()
@@ -424,8 +422,7 @@ function isPriorityHousehold(household) {
     .toLowerCase();
 
   return (
-    vulnerability.includes('high') ||
-    vulnerability.includes('highly')
+    vulnerability.includes('high')
   );
 }
 

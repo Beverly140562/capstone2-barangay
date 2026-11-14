@@ -218,14 +218,12 @@ function vulnerabilityClass(
   ).toLowerCase();
 
   if (
-    value.includes('highly') ||
     value.includes('high')
   ) {
     return 'text-alert';
   }
 
   if (
-    value.includes('moderately') ||
     value.includes('moderate') ||
     value.includes('medium')
   ) {

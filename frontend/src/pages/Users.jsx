@@ -412,7 +412,7 @@ export default function Users() {
                     </td>
 
                     <td className="px-2 py-2">
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-1">
 
                         <Button
                           variant="outline"
