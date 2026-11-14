@@ -1258,34 +1258,42 @@ def predict_one(
     print("[ML] RANDOM FOREST INPUT:")
     print(input_df.to_dict(orient="records"))
 
+   
     # ========================================================
     # RANDOM FOREST PREDICTION
     # ========================================================
 
-    # Keep the original Random Forest prediction for reference
-rf_prediction = str(_model.predict(input_df)[0])
-probabilities = _model.predict_proba(input_df)[0]
-classes = _model.classes_
+    # Keep the original Random Forest prediction for reference.
+    rf_prediction = str(_model.predict(input_df)[0])
+    probabilities = _model.predict_proba(input_df)[0]
+    classes = _model.classes_
 
-rf_vulnerability = display_vulnerability(rf_prediction)
-rf_probability = round(float(max(probabilities)), 4)
+    rf_vulnerability = display_vulnerability(rf_prediction)
+    rf_probability = round(float(max(probabilities)), 4)
 
-probability_result = {
-    str(label): round(float(prob), 4)
-    for label, prob in zip(classes, probabilities)
-}
+    probability_result = {
+        str(label): round(float(prob), 4)
+        for label, prob in zip(classes, probabilities)
+    }
 
-# Final vulnerability classification based on TOTAL HOUSEHOLD INCOME
-if household_income <= 10999:
-    vulnerability = "Highly Vulnerable"
+    # ========================================================
+    # FINAL VULNERABILITY BASED ON TOTAL HOUSEHOLD INCOME
+    # ========================================================
 
-elif household_income <= 24999:
-    vulnerability = "Moderately Vulnerable"
+    if household_income <= 10999:
+        vulnerability = "Highly Vulnerable"
 
-else:
-    vulnerability = "Low Vulnerable"
+    elif household_income <= 24999:
+        vulnerability = "Moderately Vulnerable"
 
-classification_source = "Household Income Classification"
+    else:
+        vulnerability = "Low Vulnerable"
+
+    classification_source = "Household Income Classification"
+
+    print("[ML] Random Forest:", rf_vulnerability)
+    print("[ML] Household Income:", household_income)
+    print("[ML] Final Vulnerability:", vulnerability)
 
     # ========================================================
     # PREPARE HOUSEHOLD FOR PROGRAM MATCHING
@@ -1302,13 +1310,9 @@ classification_source = "Household Income Classification"
     }
 
     if hasattr(row, "model_copy"):
-        matching_household = row.model_copy(
-            update=updates
-        )
+        matching_household = row.model_copy(update=updates)
     else:
-        matching_household = row.copy(
-            update=updates
-        )
+        matching_household = row.copy(update=updates)
 
     # ========================================================
     # ASSISTANCE PROGRAM MATCHING
@@ -1325,19 +1329,20 @@ classification_source = "Household Income Classification"
     # ========================================================
 
     return {
-    "vulnerability": vulnerability,
-    "vulnerability_prob": None,
-    "rf_vulnerability": rf_vulnerability,
-    "rf_vulnerability_prob": rf_probability,
-    "classification_source": classification_source,
-    "household_composition": composition,
-    "member_count": member_count,
-    "family_size": family_size,
-    "household_monthly_income": household_income,
-    "program_eligible": True if suggested_programs else None,
-    "suggested_programs": suggested_programs,
-    "probabilities": probability_result,
-}
+        "vulnerability": vulnerability,
+        "vulnerability_prob": None,
+        "rf_vulnerability": rf_vulnerability,
+        "rf_vulnerability_prob": rf_probability,
+        "classification_source": classification_source,
+        "household_composition": composition,
+        "member_count": member_count,
+        "family_size": family_size,
+        "household_monthly_income": household_income,
+        "program_eligible": True if suggested_programs else None,
+        "suggested_programs": suggested_programs,
+        "probabilities": probability_result,
+    }
+
 
 # ============================================================
 # ROOT
