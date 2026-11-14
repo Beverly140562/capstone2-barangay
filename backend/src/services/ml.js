@@ -2,7 +2,10 @@
 const { query } = require('../db');
 
 const ML_SERVICE_URL = (
-  process.env.ML_SERVICE_URL || 'http://127.0.0.1:5001'
+  process.env.ML_SERVICE_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? ''
+    : 'http://127.0.0.1:5001')
 ).replace(/\/+$/, '');
 
 function toNumberOrNull(value) {
@@ -206,82 +209,124 @@ income_proof_images: household.income_proof_images ?? [],
     Array.isArray(programs) ? programs.length : 0
   );
 
-  let response;
+  
+let response;
 
-  try {
-    response = await fetch(`${ML_SERVICE_URL}/predict`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        household: modelHousehold,
-        members,
-        programs: Array.isArray(programs) ? programs : [],
-      }),
-    });
-  } catch (error) {
-    console.error(
-      '[ML] Could not connect to ML service:',
-      error
-    );
-
-    throw new Error(
-      `Could not connect to ML service at ${ML_SERVICE_URL}: ${error.message}`
-    );
-  }
-
-  const responseText = await response.text();
-
-  let result;
-
-  try {
-    result = responseText ? JSON.parse(responseText) : {};
-  } catch {
-    console.error('[ML] Invalid response:', responseText);
-
-    throw new Error(
-      `ML service returned an invalid response: ${responseText}`
-    );
-  }
-
-  if (!response.ok) {
-    console.error('[ML] Service returned an error:', {
-      status: response.status,
-      result,
-    });
-
-    throw new Error(
-      result.detail ||
-      result.error ||
-      `ML service request failed with status ${response.status}`
-    );
-  }
-
-  if (!result.vulnerability) {
-    console.error(
-      '[ML] Missing vulnerability in response:',
-      result
-    );
-
-    throw new Error(
-      'ML service response does not contain a vulnerability prediction.'
-    );
-  }
-
-  console.log('[ML] Prediction successful:', {
-    vulnerability: result.vulnerability,
-    vulnerability_prob: result.vulnerability_prob,
-    household_monthly_income: householdMonthlyIncome,
-    suggested_programs: result.suggested_programs,
+try {
+  console.log('[ML] Sending prediction request:', {
+    url: `${ML_SERVICE_URL}/predict`,
+    household_id: household.household_id,
+    family_size: totalFamilySize,
   });
 
-  return {
-    ...result,
-    suggested_programs: normalizeSuggestedPrograms(
-      result.suggested_programs
-    ),
-  };
+  response = await fetch(`${ML_SERVICE_URL}/predict`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify({
+      household: modelHousehold,
+      members,
+      programs: Array.isArray(programs) ? programs : [],
+    }),
+    signal: AbortSignal.timeout(30000),
+  });
+
+} catch (error) {
+  console.error('[ML] Connection failed:', error.message);
+
+  throw new Error(
+    `Unable to connect to ML service at ${ML_SERVICE_URL}: ${error.message}`
+  );
+}
+
+// Read response safely.
+const responseText = await response.text();
+
+const contentType =
+  response.headers.get('content-type') || '';
+
+console.log('[ML] Response status:', response.status);
+console.log('[ML] Response content type:', contentType);
+
+// Detect HTML or other non-JSON responses.
+if (!contentType.toLowerCase().includes('application/json')) {
+  const preview = responseText
+    .slice(0, 300)
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  console.error('[ML] Non-JSON response received:', {
+    status: response.status,
+    contentType,
+    preview,
+  });
+
+  if (
+    responseText.includes('Just a moment') ||
+    responseText.includes('Cloudflare') ||
+    responseText.includes('challenge-platform')
+  ) {
+    throw new Error(
+      'The ML service is being blocked by a Cloudflare security challenge. ' +
+      'The request did not receive a FastAPI JSON response. ' +
+      'Check the ML service hostname and hosting security configuration.'
+    );
+  }
+
+  throw new Error(
+    `ML service returned a non-JSON response. ` +
+    `HTTP ${response.status}, Content-Type: ${contentType}. ` +
+    `Response: ${preview}`
+  );
+}
+
+let result;
+
+try {
+  result = JSON.parse(responseText);
+} catch (error) {
+  console.error('[ML] JSON parsing failed:', error.message);
+
+  throw new Error(
+    `ML service returned malformed JSON. HTTP ${response.status}.`
+  );
+}
+
+// Check HTTP status.
+if (!response.ok) {
+  console.error('[ML] Prediction request failed:', result);
+
+  throw new Error(
+    result.detail ||
+    result.error ||
+    `ML service request failed with status ${response.status}.`
+  );
+}
+
+// Check prediction result.
+if (!result.vulnerability) {
+  console.error('[ML] Missing vulnerability:', result);
+
+  throw new Error(
+    'ML service response does not contain a vulnerability prediction.'
+  );
+}
+
+console.log('[ML] Prediction successful:', {
+  vulnerability: result.vulnerability,
+  vulnerability_prob: result.vulnerability_prob,
+  household_monthly_income: householdMonthlyIncome,
+  suggested_programs: result.suggested_programs,
+});
+
+return {
+  ...result,
+  suggested_programs: normalizeSuggestedPrograms(
+    result.suggested_programs
+  ),
+};
 }
 
 module.exports = {
