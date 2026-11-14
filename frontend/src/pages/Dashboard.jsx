@@ -319,6 +319,18 @@ function getHistory(response) {
     return response.validation_records;
   }
 
+  if (Array.isArray(response?.approved_beneficiaries)) {
+    return response.approved_beneficiaries;
+  }
+
+  if (Array.isArray(response?.calamity_beneficiaries)) {
+    return response.calamity_beneficiaries;
+  }
+
+  if (Array.isArray(response?.beneficiaries)) {
+    return response.beneficiaries;
+  }
+
   if (Array.isArray(response?.history)) {
     return response.history;
   }
@@ -549,7 +561,10 @@ export default function Dashboard() {
           results[1] ?? {};
 
         const historyResponse =
-          results[2] ?? {};
+  results[2] ?? {};
+
+const calamityResponse =
+  results[3] ?? {};
 
         /* ------------------------------------------------------
            SUMMARY
@@ -574,10 +589,34 @@ export default function Dashboard() {
            HISTORY
         ------------------------------------------------------ */
 
-        const historyData =
-          getHistory(
-            historyResponse
-          );
+        // Regular beneficiary records
+const regularHistory = getHistory(
+  historyResponse
+).map((record) => ({
+  ...record,
+  record_type: 'Regular',
+}));
+
+// Approved calamity beneficiary records
+const calamityHistory = getHistory(
+  calamityResponse
+).map((record) => ({
+  ...record,
+
+  validation_id:
+    record?.validation_id ??
+    `calamity-${record?.calamity_id}`,
+
+  validation_status: 'Approved',
+
+  record_type: 'Calamity',
+}));
+
+// Combine both sources
+const historyData = [
+  ...regularHistory,
+  ...calamityHistory,
+];
 
         console.log(
           'Dashboard summary:',
@@ -620,16 +659,17 @@ export default function Dashboard() {
            APPROVED BENEFICIARIES THIS MONTH
         ------------------------------------------------------ */
 
-        const monthlyApproved =
-          historyData.filter(
-            (record) =>
-              isHistoryApproved(
-                record
-              ) &&
-              isThisMonth(
-                historyDate(record)
-              )
-          ).length;
+        const monthlyApproved = new Set(
+  historyData
+    .filter(
+      (record) =>
+        isHistoryApproved(record) &&
+        isThisMonth(historyDate(record))
+    )
+    .map((record) => record?.household_id)
+    .filter(Boolean)
+    .map((id) => String(id))
+).size;
 
         setApprovedThisMonth(
           monthlyApproved
@@ -640,14 +680,14 @@ export default function Dashboard() {
         ------------------------------------------------------ */
 
         if (role === 'admin') {
-          setUsers(
-            getUsers(
-              results[3] ?? {}
-            )
-          );
-        } else {
-          setUsers([]);
-        }
+  setUsers(
+    getUsers(
+      results[4] ?? {}
+    )
+  );
+} else {
+  setUsers([]);
+}
       } catch (e) {
         if (cancelled) {
           return;
@@ -1529,9 +1569,16 @@ export default function Dashboard() {
                         </td>
 
                         <td className="px-3 py-2 text-2xl">
-                          {record?.program_name ||
-                            '—'}
-                        </td>
+  <div>
+    {record?.program_name || '—'}
+  </div>
+
+  {record?.record_type === 'Calamity' && (
+    <span className="mt-1 inline-block rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-700">
+      Calamity Assistance
+    </span>
+  )}
+</td>
 
                         <td className="px-3 py-2 text-2xl">
                           {formatDate(
