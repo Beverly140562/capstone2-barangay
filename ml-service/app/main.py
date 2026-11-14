@@ -1233,10 +1233,7 @@ def predict_one(
     )
 
     if not head_education:
-        raise HTTPException(
-            status_code=422,
-            detail="Household head education is missing.",
-        )
+    head_education = None
 
     # ========================================================
     # RANDOM FOREST INPUT
@@ -1263,7 +1260,7 @@ def predict_one(
     # RANDOM FOREST PREDICTION
     # ========================================================
 
-    # Keep the original Random Forest prediction for reference.
+    # Keep Random Forest prediction for reference.
     rf_prediction = str(_model.predict(input_df)[0])
     probabilities = _model.predict_proba(input_df)[0]
     classes = _model.classes_
@@ -1276,20 +1273,20 @@ def predict_one(
         for label, prob in zip(classes, probabilities)
     }
 
-    # FINAL VULNERABILITY CLASSIFICATION BASED ON HOUSEHOLD INCOME
+    # ========================================================
+    # FINAL VULNERABILITY CLASSIFICATION BASED ON INCOME
+    # ========================================================
+
     if household_income <= 10999:
         vulnerability = "High Vulnerable"
+
     elif household_income <= 24999:
         vulnerability = "Moderate Vulnerable"
+
     else:
         vulnerability = "Low Vulnerable"
 
     classification_source = "Household Income Classification"
-
-    updates = {
-        "vulnerability": vulnerability,
-        "vulnerability_prob": None,
-    }v
 
     # ========================================================
     # PREPARE HOUSEHOLD FOR PROGRAM MATCHING
@@ -1325,19 +1322,20 @@ def predict_one(
     # ========================================================
 
     return {
-    "vulnerability": vulnerability,
-    "vulnerability_prob": None,
-    "rf_vulnerability": rf_vulnerability,
-    "rf_vulnerability_prob": rf_probability,
-    "classification_source": classification_source,
-    "household_composition": composition,
-    "member_count": member_count,
-    "family_size": family_size,
-    "household_monthly_income": household_income,
-    "program_eligible": True if suggested_programs else None,
-    "suggested_programs": suggested_programs,
-    "probabilities": probability_result,
-}
+        "vulnerability": vulnerability,
+        "vulnerability_prob": None,
+        "rf_vulnerability": rf_vulnerability,
+        "rf_vulnerability_prob": rf_probability,
+        "classification_source": classification_source,
+        "household_composition": composition,
+        "member_count": member_count,
+        "family_size": family_size,
+        "household_monthly_income": household_income,
+        "program_eligible": True if suggested_programs else None,
+        "suggested_programs": suggested_programs,
+        "probabilities": probability_result,
+    }
+
 
 
 # ============================================================
