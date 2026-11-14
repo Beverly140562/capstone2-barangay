@@ -9,12 +9,30 @@ router.use(auth, requireRole('admin'));
 router.get('/', async (req, res) => {
   try {
     const rows = await query(
-      `select user_id, username, full_name, email, roles, account_status, date_created, visited_date
-         from users order by date_created desc`
+      `SELECT
+          user_id,
+          username,
+          full_name,
+          email,
+          roles,
+          account_status,
+          date_created,
+          visited_date
+       FROM users
+       ORDER BY date_created DESC`
     );
-    res.json({ users: rows });
+
+    res.json({
+      users: rows,
+      total_accounts: rows.length,
+      online_accounts: 0
+    });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error('Load users error:', e);
+
+    res.status(500).json({
+      error: e.message
+    });
   }
 });
 

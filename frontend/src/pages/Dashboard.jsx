@@ -1214,11 +1214,12 @@ if (role === 'admin') {
     const pendingHouseholds =
       validatedHouseholds;
 
-    // Count all registered accounts, regardless of role.
-const totalAccounts = users.length;
+   const totalAccounts = users.length;
 
-// Count all accounts currently online.
-const onlineAccounts = users.filter(isUserOnline).length;
+const activeAccounts = users.filter(
+  (account) => account.account_status === true
+).length;
+
 
       const totalHouseholds =
         Number(
@@ -1252,10 +1253,10 @@ const onlineAccounts = users.filter(isUserOnline).length;
           />
 
           <Stat
-            label="STAFF ACCOUNTS"
-            value={totalAccounts}
-            note={`${onlineAccounts} online accounts`}
-          />
+  label="TOTAL USER ACCOUNTS"
+  value={totalAccounts}
+  note={`${activeAccounts} active accounts`}
+/>
 
           <Stat
             label="APPROVED BENEFICIARIES"
