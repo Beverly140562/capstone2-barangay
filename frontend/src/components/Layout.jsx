@@ -118,7 +118,7 @@ export default function Layout({ children }) {
     </span>
 
     <span className="text-[22px] font-semibold text-white">
-      {user?.roles} {user?.surname} {user?.given_name}
+      {user?.username}
     </span>
   </div>
 
