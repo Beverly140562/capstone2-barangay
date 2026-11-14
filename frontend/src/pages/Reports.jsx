@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import toast, { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 
 import { api } from '../lib/api';
 import { mlApi } from '../lib/mlApi';
@@ -1415,7 +1415,7 @@ const loadRecords = async () => {
       setAnalyticsData(result);
       setRecords([]);
 
-     
+      toast.success('Analytical summary loaded.');
       return;
     }
 
@@ -2854,12 +2854,7 @@ try {
 
   return (
     <div className="space-y-6">
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          duration: 3000,
-        }}
-      />
+      
 
       {/* PAGE HEADER */}
 
