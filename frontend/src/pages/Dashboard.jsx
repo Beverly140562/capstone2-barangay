@@ -561,15 +561,13 @@ const results = await Promise.all(
   })
 );
 
-        if (cancelled) {
-          return;
-        }
+       if (cancelled) {
+  return;
+}
 
-        const summaryResponse =
-          results[0] ?? {};
-
-        const householdResponse =
-          results[1] ?? {};
+const summaryResponse = results[0] ?? {};
+const householdResponse = results[1] ?? {};
+const historyResponse = results[2] ?? {};
 
         /* ------------------------------------------------------
    SUMMARY
