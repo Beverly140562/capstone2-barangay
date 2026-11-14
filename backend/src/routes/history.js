@@ -10,22 +10,23 @@ const {
 } = require('../middleware/auth');
 
 router.use(auth);
-
 /*
 |--------------------------------------------------------------------------
 | GET ALL BENEFICIARY VALIDATION HISTORY
 |--------------------------------------------------------------------------
-| Includes Approved and Rejected regular and calamity records.
+| Combines regular and calamity beneficiary records.
 */
 router.get(
   '/beneficiary-validation',
   requireRole('admin', 'captain', 'staff'),
   async (req, res) => {
     try {
-      const result = await query(`
-        -- REGULAR BENEFICIARY RECORDS
+      // -------------------------------------------------------
+      // REGULAR BENEFICIARY RECORDS
+      // -------------------------------------------------------
+      const regularResult = await query(`
         SELECT
-          bv.validation_id::text AS validation_id,
+          bv.validation_id,
           bv.household_id,
           bv.program_id,
           bv.validation_status,
@@ -44,16 +45,7 @@ router.get(
           ap.description,
           ap.eligibility_rules,
 
-          u.full_name AS approved_by_name,
-
-          'Regular' AS record_type,
-
-          NULL AS risk_level,
-          NULL AS house_type,
-          NULL AS roof_damage,
-          NULL AS wall_damage,
-          NULL AS flooding_level,
-          NULL AS damage_risk
+          u.full_name AS approved_by_name
 
         FROM beneficiary_validation bv
 
@@ -66,87 +58,163 @@ router.get(
         LEFT JOIN users u
           ON u.user_id = bv.approved_by
 
-        WHERE LOWER(TRIM(COALESCE(bv.validation_status, ''))) IN (
-          'approved',
-          'rejected'
-        )
+        WHERE LOWER(
+          TRIM(COALESCE(bv.validation_status, ''))
+        ) IN ('approved', 'rejected')
 
-        UNION ALL
+        ORDER BY COALESCE(
+          bv.approved_at,
+          bv.submitted_at
+        ) DESC NULLS LAST
+      `);
 
-        -- CALAMITY BENEFICIARY RECORDS
+      // -------------------------------------------------------
+      // CALAMITY BENEFICIARY RECORDS
+      // -------------------------------------------------------
+      const calamityResult = await query(`
         SELECT
-          ('calamity-' || cp.calamity_id::text) AS validation_id,
+          cp.calamity_id,
           cp.household_id,
           cp.program_id,
-          cp.status AS validation_status,
-
-          NULL AS submitted_by,
-          cp.created_at AS submitted_at,
-
+          cp.status,
+          cp.created_at,
           cp.approved_by,
           cp.approved_at,
-          cp.rejection_reason AS remarks,
-
-          h.household_head_name,
-          h.purok,
-          h.address,
-          h.vulnerability,
-
-          ap.program_name,
-          ap.description,
-          ap.eligibility_rules,
-
-          u.full_name AS approved_by_name,
-
-          'Calamity' AS record_type,
+          cp.rejection_reason,
 
           cp.risk_level,
           cp.house_type,
           cp.roof_damage,
           cp.wall_damage,
           cp.flooding_level,
-          cp.damage_risk
+          cp.damage_risk,
+
+          h.household_head_name,
+          h.purok,
+          h.address,
+          h.vulnerability,
+
+          p.program_name,
+          p.description,
+
+          u.full_name AS approved_by_name
 
         FROM calamity_programs cp
 
         INNER JOIN households h
           ON h.household_id = cp.household_id
 
-        LEFT JOIN assistance_programs ap
-          ON ap.program_id = cp.program_id
+        LEFT JOIN assistance_programs p
+          ON p.program_id = cp.program_id
 
         LEFT JOIN users u
           ON u.user_id = cp.approved_by
 
-        WHERE LOWER(TRIM(COALESCE(cp.status, ''))) IN (
-          'approved',
-          'rejected'
-        )
+        WHERE LOWER(
+          TRIM(COALESCE(cp.status, ''))
+        ) IN ('approved', 'rejected')
 
-        ORDER BY
-          COALESCE(approved_at, submitted_at) DESC NULLS LAST
+        ORDER BY COALESCE(
+          cp.approved_at,
+          cp.created_at
+        ) DESC NULLS LAST
       `);
 
-      const rows = Array.isArray(result)
-        ? result
-        : result?.rows || [];
+      const regularRecords = Array.isArray(regularResult)
+        ? regularResult
+        : regularResult?.rows || [];
 
-      console.log(
-        'Combined beneficiary history:',
-        rows.length
-      );
+      const calamityRecords = Array.isArray(calamityResult)
+        ? calamityResult
+        : calamityResult?.rows || [];
 
-      return res.status(200).json(rows);
+      // -------------------------------------------------------
+      // NORMALIZE REGULAR RECORDS
+      // -------------------------------------------------------
+      const regularHistory = regularRecords.map((record) => ({
+        ...record,
+        validation_id: String(record.validation_id),
+        record_type: 'Regular',
+      }));
+
+      // -------------------------------------------------------
+      // NORMALIZE CALAMITY RECORDS
+      // -------------------------------------------------------
+      const calamityHistory = calamityRecords.map((record) => ({
+        validation_id: `calamity-${record.calamity_id}`,
+        calamity_id: record.calamity_id,
+
+        household_id: record.household_id,
+        program_id: record.program_id,
+
+        validation_status: record.status,
+
+        submitted_by: null,
+        submitted_at: record.created_at,
+
+        approved_by: record.approved_by,
+        approved_at: record.approved_at,
+
+        remarks: record.rejection_reason,
+
+        household_head_name: record.household_head_name,
+        purok: record.purok,
+        address: record.address,
+        vulnerability: record.vulnerability,
+
+        program_name: record.program_name || 'Calamity Assistance',
+        description: record.description,
+
+        approved_by_name: record.approved_by_name,
+
+        record_type: 'Calamity',
+
+        risk_level: record.risk_level,
+        house_type: record.house_type,
+        roof_damage: record.roof_damage,
+        wall_damage: record.wall_damage,
+        flooding_level: record.flooding_level,
+        damage_risk: record.damage_risk,
+      }));
+
+      // -------------------------------------------------------
+      // COMBINE AND SORT
+      // -------------------------------------------------------
+      const combinedHistory = [
+        ...regularHistory,
+        ...calamityHistory,
+      ].sort((a, b) => {
+        const dateA = new Date(
+          a.approved_at || a.submitted_at || 0
+        ).getTime();
+
+        const dateB = new Date(
+          b.approved_at || b.submitted_at || 0
+        ).getTime();
+
+        return dateB - dateA;
+      });
+
+      console.log('Beneficiary history loaded:', {
+        regular: regularHistory.length,
+        calamity: calamityHistory.length,
+        total: combinedHistory.length,
+      });
+
+      return res.status(200).json(combinedHistory);
 
     } catch (error) {
       console.error(
-        'GET /history/beneficiary-validation error:',
+        'GET /history/beneficiary-validation ERROR:',
         error
       );
 
       return res.status(500).json({
         error: 'Failed to load beneficiary history',
         details: error.message,
+        code: error.code || null,
+        column: error.column || null,
+        table: error.table || null,
       });
     }
   }
@@ -169,11 +237,11 @@ router.get(
         });
       }
 
-      const result = await query(
+      // REGULAR HISTORY
+      const regularResult = await query(
         `
-        -- REGULAR RECORDS
         SELECT
-          bv.validation_id::text AS validation_id,
+          bv.validation_id,
           bv.household_id,
           bv.program_id,
           bv.validation_status,
@@ -192,16 +260,7 @@ router.get(
           ap.description,
           ap.eligibility_rules,
 
-          u.full_name AS approved_by_name,
-
-          'Regular' AS record_type,
-
-          NULL AS risk_level,
-          NULL AS house_type,
-          NULL AS roof_damage,
-          NULL AS wall_damage,
-          NULL AS flooding_level,
-          NULL AS damage_risk
+          u.full_name AS approved_by_name
 
         FROM beneficiary_validation bv
 
@@ -215,85 +274,150 @@ router.get(
           ON u.user_id = bv.approved_by
 
         WHERE bv.household_id = $1
-          AND LOWER(TRIM(COALESCE(bv.validation_status, ''))) IN (
-            'approved',
-            'rejected'
-          )
+          AND LOWER(
+            TRIM(COALESCE(bv.validation_status, ''))
+          ) IN ('approved', 'rejected')
 
-        UNION ALL
+        ORDER BY COALESCE(
+          bv.approved_at,
+          bv.submitted_at
+        ) DESC NULLS LAST
+        `,
+        [householdId]
+      );
 
-        -- CALAMITY RECORDS
+      // CALAMITY HISTORY
+      const calamityResult = await query(
+        `
         SELECT
-          ('calamity-' || cp.calamity_id::text) AS validation_id,
+          cp.calamity_id,
           cp.household_id,
           cp.program_id,
-          cp.status AS validation_status,
-
-          NULL AS submitted_by,
-          cp.created_at AS submitted_at,
-
+          cp.status,
+          cp.created_at,
           cp.approved_by,
           cp.approved_at,
-          cp.rejection_reason AS remarks,
-
-          h.household_head_name,
-          h.purok,
-          h.address,
-          h.vulnerability,
-
-          ap.program_name,
-          ap.description,
-          ap.eligibility_rules,
-
-          u.full_name AS approved_by_name,
-
-          'Calamity' AS record_type,
+          cp.rejection_reason,
 
           cp.risk_level,
           cp.house_type,
           cp.roof_damage,
           cp.wall_damage,
           cp.flooding_level,
-          cp.damage_risk
+          cp.damage_risk,
+
+          h.household_head_name,
+          h.purok,
+          h.address,
+          h.vulnerability,
+
+          p.program_name,
+          p.description,
+
+          u.full_name AS approved_by_name
 
         FROM calamity_programs cp
 
         INNER JOIN households h
           ON h.household_id = cp.household_id
 
-        LEFT JOIN assistance_programs ap
-          ON ap.program_id = cp.program_id
+        LEFT JOIN assistance_programs p
+          ON p.program_id = cp.program_id
 
         LEFT JOIN users u
           ON u.user_id = cp.approved_by
 
         WHERE cp.household_id = $1
-          AND LOWER(TRIM(COALESCE(cp.status, ''))) IN (
-            'approved',
-            'rejected'
-          )
+          AND LOWER(
+            TRIM(COALESCE(cp.status, ''))
+          ) IN ('approved', 'rejected')
 
-        ORDER BY
-          COALESCE(approved_at, submitted_at) DESC NULLS LAST
+        ORDER BY COALESCE(
+          cp.approved_at,
+          cp.created_at
+        ) DESC NULLS LAST
         `,
         [householdId]
       );
 
-      const rows = Array.isArray(result)
-        ? result
-        : result?.rows || [];
+      const regularRecords = Array.isArray(regularResult)
+        ? regularResult
+        : regularResult?.rows || [];
 
-      return res.status(200).json(rows);
+      const calamityRecords = Array.isArray(calamityResult)
+        ? calamityResult
+        : calamityResult?.rows || [];
+
+      const regularHistory = regularRecords.map((record) => ({
+        ...record,
+        validation_id: String(record.validation_id),
+        record_type: 'Regular',
+      }));
+
+      const calamityHistory = calamityRecords.map((record) => ({
+        validation_id: `calamity-${record.calamity_id}`,
+        calamity_id: record.calamity_id,
+
+        household_id: record.household_id,
+        program_id: record.program_id,
+
+        validation_status: record.status,
+
+        submitted_by: null,
+        submitted_at: record.created_at,
+
+        approved_by: record.approved_by,
+        approved_at: record.approved_at,
+
+        remarks: record.rejection_reason,
+
+        household_head_name: record.household_head_name,
+        purok: record.purok,
+        address: record.address,
+        vulnerability: record.vulnerability,
+
+        program_name: record.program_name || 'Calamity Assistance',
+        description: record.description,
+
+        approved_by_name: record.approved_by_name,
+
+        record_type: 'Calamity',
+
+        risk_level: record.risk_level,
+        house_type: record.house_type,
+        roof_damage: record.roof_damage,
+        wall_damage: record.wall_damage,
+        flooding_level: record.flooding_level,
+        damage_risk: record.damage_risk,
+      }));
+
+      const combinedHistory = [
+        ...regularHistory,
+        ...calamityHistory,
+      ].sort((a, b) => {
+        const dateA = new Date(
+          a.approved_at || a.submitted_at || 0
+        ).getTime();
+
+        const dateB = new Date(
+          b.approved_at || b.submitted_at || 0
+        ).getTime();
+
+        return dateB - dateA;
+      });
+
+      return res.status(200).json(combinedHistory);
 
     } catch (error) {
       console.error(
-        'GET /history/beneficiary-validation/:householdId error:',
+        'GET household beneficiary history ERROR:',
         error
       );
 
       return res.status(500).json({
         error: 'Failed to load household history',
         details: error.message,
+        code: error.code || null,
       });
     }
   }
