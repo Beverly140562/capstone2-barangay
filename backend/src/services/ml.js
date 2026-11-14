@@ -145,8 +145,9 @@ async function predictHousehold(household) {
     household_monthly_income: householdMonthlyIncome,
 
     // Income proof images used to control assistance suggestions.
-income_proof_images: household.income_proof_images ?? null,
-
+income_proof_images: Array.isArray(household.income_proof_images)
+  ? household.income_proof_images
+  : [],
     // Household size.
     member_count: totalFamilySize,
     family_size: totalFamilySize,
