@@ -1277,17 +1277,19 @@ def predict_one(
     }
 
     # FINAL VULNERABILITY CLASSIFICATION BASED ON HOUSEHOLD INCOME
+    if household_income <= 10999:
+        vulnerability = "High Vulnerable"
+    elif household_income <= 24999:
+        vulnerability = "Moderate Vulnerable"
+    else:
+        vulnerability = "Low Vulnerable"
 
-if household_income <= 10999:
-    vulnerability = "High Vulnerable"
+    classification_source = "Household Income Classification"
 
-elif household_income <= 24999:
-    vulnerability = "Moderate Vulnerable"
-
-else:
-    vulnerability = "Low Vulnerable"
-
-classification_source = "Household Income Classification"
+    updates = {
+        "vulnerability": vulnerability,
+        "vulnerability_prob": None,
+    }v
 
     # ========================================================
     # PREPARE HOUSEHOLD FOR PROGRAM MATCHING
