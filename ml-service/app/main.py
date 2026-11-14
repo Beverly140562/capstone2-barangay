@@ -1311,17 +1311,22 @@ def predict_one(
     # ========================================================
 
     # Keep Random Forest prediction for reference.
-    rf_prediction = str(_model.predict(input_df)[0])
-    probabilities = _model.predict_proba(input_df)[0]
-    classes = _model.classes_
+    
+rf_prediction = str(_model.predict(input_df)[0])
+probabilities = _model.predict_proba(input_df)[0]
+classes = _model.classes_
 
-    rf_vulnerability = display_vulnerability(rf_prediction)
-    rf_probability = round(float(max(probabilities)), 4)
+rf_vulnerability = display_vulnerability(rf_prediction)
 
-    probability_result = {
-        str(label): round(float(prob), 4)
-        for label, prob in zip(classes, probabilities)
-    }
+# Probability of the Random Forest's predicted class
+rf_probability = round(float(max(probabilities)), 4)
+
+# Probabilities for all Random Forest classes
+probability_result = {
+    str(label): round(float(prob), 4)
+    for label, prob in zip(classes, probabilities)
+}
+
 
     # ========================================================
     # FINAL VULNERABILITY CLASSIFICATION BASED ON INCOME
@@ -1371,20 +1376,27 @@ def predict_one(
     # RESPONSE
     # ========================================================
 
-    return {
-        "vulnerability": vulnerability,
-        "vulnerability_prob": None,
-        "rf_vulnerability": rf_vulnerability,
-        "rf_vulnerability_prob": rf_probability,
-        "classification_source": classification_source,
-        "household_composition": composition,
-        "member_count": member_count,
-        "family_size": family_size,
-        "household_monthly_income": household_income,
-        "program_eligible": True if suggested_programs else None,
-        "suggested_programs": suggested_programs,
-        "probabilities": probability_result,
-    }
+    
+return {
+    "vulnerability": vulnerability,
+
+    # Random Forest probabilities
+    "probabilities": probability_result,
+
+    # Random Forest prediction
+    "rf_vulnerability": rf_vulnerability,
+    "rf_vulnerability_prob": rf_probability,
+
+    "classification_source": classification_source,
+    "household_composition": composition,
+    "member_count": member_count,
+    "family_size": family_size,
+    "household_monthly_income": household_income,
+
+    "program_eligible": True if suggested_programs else None,
+    "suggested_programs": suggested_programs,
+}
+
 
 
 

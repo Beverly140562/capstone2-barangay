@@ -70,6 +70,40 @@ function normalizeSuggestedPrograms(value) {
     })
     .filter(Boolean);
 }
+
+
+function getVulnerabilityProbability(household) {
+  const vulnerability = household?.vulnerability;
+
+  const probabilityClass = {
+    'High Vulnerable': 'High',
+    'Moderate Vulnerable': 'Medium',
+    'Low Vulnerable': 'Low',
+  }[vulnerability];
+
+  if (!probabilityClass) return null;
+
+  let probabilities = household?.probabilities;
+
+  // Support JSON-string responses too.
+  if (typeof probabilities === 'string') {
+    try {
+      probabilities = JSON.parse(probabilities);
+    } catch {
+      return null;
+    }
+  }
+
+  const probability = probabilities?.[probabilityClass];
+
+  if (probability == null || !Number.isFinite(Number(probability))) {
+    return null;
+  }
+
+  return Number(probability) * 100;
+}
+
+
 export default function Households() {
   const [params] = useSearchParams();
   const location = useLocation();
@@ -612,14 +646,14 @@ if (!household) {
             </Badge>
           </div>
 
-          <div className="text-lg text-red-200 mt-2">
-            Probability:{' '}
-            {household.probabilities != null
-              ? `${(
-                  Number(household.probabilities) * 100
-                ).toFixed(1)}%`
-              : '—'}
-          </div>
+          
+<div className="text-lg text-red-200 mt-2">
+  Probability:{' '}
+  {getVulnerabilityProbability(household) !== null
+    ? `${getVulnerabilityProbability(household).toFixed(2)}%`
+    : '—'}
+</div>
+
 
           <div className="text-xl mt-3 font-semibold">
             Suggested Programs
