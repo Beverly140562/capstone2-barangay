@@ -249,7 +249,6 @@ router.get(
         SELECT
           cp.calamity_id,
           cp.household_id,
-          cp.household_name,
 
           h.household_head_name,
           h.purok,
@@ -257,6 +256,8 @@ router.get(
           h.family_number,
 
           cp.calamity_program,
+          cp.program_id,
+
           cp.house_type,
           cp.roof_damage,
           cp.wall_damage,
@@ -288,8 +289,9 @@ router.get(
 
         WHERE cp.status = 'Approved'
 
-        ORDER BY cp.approved_at DESC NULLS LAST,
-                 cp.created_at DESC
+        ORDER BY
+          cp.approved_at DESC NULLS LAST,
+          cp.created_at DESC
       `);
 
       return res.json({
@@ -307,6 +309,7 @@ router.get(
         error:
           error.message ||
           'Failed to load approved calamity beneficiaries.',
+        code: error.code || null,
       });
     }
   }
