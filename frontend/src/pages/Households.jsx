@@ -614,9 +614,9 @@ if (!household) {
 
           <div className="text-lg text-red-200 mt-2">
             Probability:{' '}
-            {household.vulnerability_prob != null
+            {household.probabilities != null
               ? `${(
-                  Number(household.vulnerability_prob) * 100
+                  Number(household.probabilities) * 100
                 ).toFixed(1)}%`
               : '—'}
           </div>

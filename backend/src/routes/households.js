@@ -313,7 +313,7 @@ const prediction = applyIncomeProofGate(
 
     console.log('[PREDICT] Step 4: ML prediction received:', {
       vulnerability: prediction.vulnerability,
-      vulnerability_prob: prediction.vulnerability_prob,
+      probabilities: prediction.probabilities,
       suggested_programs: prediction.suggested_programs,
     });
 
@@ -330,14 +330,14 @@ const prediction = applyIncomeProofGate(
         UPDATE households
         SET
           vulnerability = $1,
-          vulnerability_prob = $2,
+          probabilities = $2,
           suggested_programs = $3
         WHERE household_id = $4
         RETURNING *
       `,
       [
         prediction.vulnerability ?? null,
-        prediction.vulnerability_prob ?? null,
+        prediction.probabilities ?? null,
         suggestedPrograms,
         householdId,
       ]
@@ -937,7 +937,7 @@ router.post(
           SELECT
             household_id,
             vulnerability,
-            vulnerability_prob,
+            probabilities,
             suggested_programs
           FROM households
           WHERE household_id = $1
