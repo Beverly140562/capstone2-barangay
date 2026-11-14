@@ -536,19 +536,16 @@ export default function Dashboard() {
         setError('');
 
         const requests = [
-          api.get('/analytics/summary'),
-          api.get('/households'),
-          api.get('/history/beneficiary-validation'),
-        ];
+  api.get('/analytics/summary'),
+  api.get('/households'),
+  api.get('/history/beneficiary-validation'),
+];
 
-        if (role === 'admin') {
-          requests.push(
-            api.get('/users')
-          );
-        }
+if (role === 'admin') {
+  requests.push(api.get('/users'));
+}
 
-        const results =
-          await Promise.all(requests);
+const results = await Promise.all(requests);
 
         if (cancelled) {
           return;
@@ -586,57 +583,37 @@ const calamityResponse =
           );
 
         /* ------------------------------------------------------
-           HISTORY
-        ------------------------------------------------------ */
+   HISTORY
+------------------------------------------------------ */
 
-        // Regular beneficiary records
-const regularHistory = getHistory(
-  historyResponse
-).map((record) => ({
-  ...record,
-  record_type: 'Regular',
-}));
+// The updated history endpoint already returns:
+// 1. Regular beneficiary records
+// 2. Calamity beneficiary records
 
-// Approved calamity beneficiary records
-const calamityHistory = getHistory(
-  calamityResponse
-).map((record) => ({
-  ...record,
+const historyData = getHistory(historyResponse);
 
-  validation_id:
-    record?.validation_id ??
-    `calamity-${record?.calamity_id}`,
+console.log(
+  'Dashboard combined beneficiary history:',
+  historyData
+);
 
-  validation_status: 'Approved',
+console.log(
+  'Regular approved:',
+  historyData.filter(
+    (record) =>
+      isHistoryApproved(record) &&
+      record.record_type !== 'Calamity'
+  )
+);
 
-  record_type: 'Calamity',
-}));
-
-// Combine both sources
-const historyData = [
-  ...regularHistory,
-  ...calamityHistory,
-];
-
-        console.log(
-          'Dashboard summary:',
-          summaryData
-        );
-
-        console.log(
-          'Dashboard households:',
-          householdData
-        );
-
-        console.log(
-          'Dashboard validation history:',
-          historyData
-        );
-
-        setSummary(summaryData);
-        setHouseholds(householdData);
-        setHistory(historyData);
-
+console.log(
+  'Calamity approved:',
+  historyData.filter(
+    (record) =>
+      isHistoryApproved(record) &&
+      record.record_type === 'Calamity'
+  )
+);
         /* ------------------------------------------------------
            HOUSEHOLDS THIS MONTH
         ------------------------------------------------------ */
@@ -682,7 +659,7 @@ const historyData = [
         if (role === 'admin') {
   setUsers(
     getUsers(
-      results[4] ?? {}
+      results[3] ?? {}
     )
   );
 } else {

@@ -39,10 +39,20 @@ router.get('/summary', async (req, res) => {
     // APPROVED HOUSEHOLDS
     // -------------------------------------------------------
     const approved = await query(`
-      SELECT COUNT(*)::int AS n
-      FROM households
-      WHERE LOWER(COALESCE(validation_status, '')) = 'approved'
-    `);
+      (
+  SELECT COUNT(DISTINCT approved.household_id)::int
+  FROM (
+    SELECT bv.household_id
+    FROM beneficiary_validation bv
+    WHERE LOWER(TRIM(COALESCE(bv.validation_status, ''))) = 'approved'
+
+    UNION
+
+    SELECT cp.household_id
+    FROM calamity_programs cp
+    WHERE LOWER(TRIM(COALESCE(cp.status, ''))) = 'approved'
+  ) approved
+) AS approved_beneficiaries`);
 
     // -------------------------------------------------------
     // PENDING HOUSEHOLDS
