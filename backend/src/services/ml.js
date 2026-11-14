@@ -144,6 +144,9 @@ async function predictHousehold(household) {
     // Exact income feature expected by the Random Forest.
     household_monthly_income: householdMonthlyIncome,
 
+    // Income proof images used to control assistance suggestions.
+income_proof_images: household.income_proof_images ?? null,
+
     // Household size.
     member_count: totalFamilySize,
     family_size: totalFamilySize,

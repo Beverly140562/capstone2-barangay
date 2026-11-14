@@ -179,6 +179,8 @@ class Household(BaseModel):
     monthly_income: float | None = None
     household_monthly_income: float | None = None
 
+    income_proof_images: list[str] | str | None = None
+
     family_number: int | None = None
     family_position: str | None = None
 
@@ -834,6 +836,49 @@ def relationships_chart(
             detail=f"Relationships chart failed: {type(exc).__name__}: {exc}",
         ) from exc
 
+
+def has_income_proof(value) -> bool:
+    if value is None:
+        return False
+
+    if isinstance(value, list):
+        return any(
+            str(item).strip()
+            for item in value
+            if item is not None
+        )
+
+    if isinstance(value, dict):
+        return bool(value)
+
+    if isinstance(value, str):
+        value = value.strip()
+
+        if not value:
+            return False
+
+        try:
+            parsed = json.loads(value)
+
+            if isinstance(parsed, list):
+                return has_income_proof(parsed)
+
+            if isinstance(parsed, dict):
+                return bool(parsed)
+
+            return bool(parsed)
+
+        except (json.JSONDecodeError, TypeError):
+            return value.lower() not in {
+                "null",
+                "none",
+                "[]",
+                "{}",
+                "false",
+            }
+
+    return False
+
 # ============================================================
 # PROGRAM MATCHING
 # ============================================================
@@ -854,6 +899,19 @@ def match_programs(
 ) -> list[dict]:
 
     matched_programs = []
+
+        # Income proof is required before suggesting assistance.
+    proof_available = has_income_proof(
+        household.income_proof_images
+    )
+
+    if not proof_available:
+        print(
+            "[PROGRAM MATCHING] No income proof uploaded. "
+            "Vulnerability classification is retained, "
+            "but assistance suggestions are disabled."
+        )
+        return []
 
     income = household.monthly_income
 
