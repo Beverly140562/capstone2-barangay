@@ -148,21 +148,18 @@ export default function About() {
                     {show(stats.totalResidents)}
                   </p>
                   <p className="mt-1.5 text-xl text-gray-600 lg:text-xl">
-                    Residents recorded in the system
+                    Residents recorded 
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 border-t border-[#EBD3D3] p-5 sm:border-l sm:border-t-0 lg:p-6">
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#F8E9EB] text-[#6E2430]">
-                  <Home className="h-6 w-6" aria-hidden="true" />
-                </span>
+              <div className="flex items-center gap-4 border-t border-[#EBD3D3] p-5 sm:border-t-0 lg:p-6">
+                
                 <div>
                   <p className="about-display text-4xl font-bold leading-none text-[#6E2430] lg:text-5xl">
-                    {show(stats.totalHouseholds)}
+                    
                   </p>
                   <p className="mt-1.5 text-xl text-gray-600 lg:text-xl">
-                    Households recorded
                   </p>
                 </div>
               </div>

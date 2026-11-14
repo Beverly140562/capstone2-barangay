@@ -1967,16 +1967,24 @@ navigate('/households');
                   Elementary Level
                 </option>
 
+                <option value="Elementary Graduate">
+                  Elementary Graduate
+                </option>
+
                 <option value="Junior High Level">
                   Junior High Level 
+                </option>
+
+                <option value="Junior High Graduate">
+                  Junior High Graduate
                 </option>
 
                 <option value="Senior High School Level">
                   Senior High School Level
                 </option>
 
-                <option value="Senior High Graduate">
-                  Senior High Graduate
+                <option value="Senior High School Graduate">
+                  Senior High School Graduate
                 </option>
 
                 <option value="ALS">
@@ -1997,6 +2005,10 @@ navigate('/households');
 
                 <option value="Master's Degree">
                   Master's Degree
+                </option>
+
+                <option value="Doctoral Degree">
+                  Doctoral Degree
                 </option>
       </select>
     </div>
