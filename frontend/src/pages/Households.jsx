@@ -319,9 +319,9 @@ const programNames = programs
                   <td className="px-3 py-2">
                     <span
                       className={`font-semibold ${
-                        h.vulnerability?.includes('Highly')
+                        h.vulnerability?.includes('High')
                           ? 'text-alert'
-                          : h.vulnerability?.includes('Moderately')
+                          : h.vulnerability?.includes('Moderate')
                           ? 'text-amber'
                           : 'text-success'
                       }`}
