@@ -1276,18 +1276,18 @@ def predict_one(
         for label, prob in zip(classes, probabilities)
     }
 
-        # ========================================================
-    # FINAL VULNERABILITY FROM RANDOM FOREST
-    # ========================================================
+    # FINAL VULNERABILITY CLASSIFICATION BASED ON HOUSEHOLD INCOME
 
-    vulnerability = rf_vulnerability
-    vulnerability_probability = rf_probability
+if household_income <= 10999:
+    vulnerability = "High Vulnerable"
 
-    classification_source = "Random Forest"
+elif household_income <= 24999:
+    vulnerability = "Moderate Vulnerable"
 
-    print("[ML] Random Forest Prediction:", rf_vulnerability)
-    print("[ML] Random Forest Probability:", rf_probability)
-    print("[ML] Final Vulnerability:", vulnerability)
+else:
+    vulnerability = "Low Vulnerable"
+
+classification_source = "Household Income Classification"
 
     # ========================================================
     # PREPARE HOUSEHOLD FOR PROGRAM MATCHING
@@ -1323,19 +1323,19 @@ def predict_one(
     # ========================================================
 
     return {
-        "vulnerability": vulnerability,
-        "vulnerability_prob": vulnerability_probability,
-        "rf_vulnerability": rf_vulnerability,
-        "rf_vulnerability_prob": rf_probability,
-        "classification_source": classification_source,
-        "household_composition": composition,
-        "member_count": member_count,
-        "family_size": family_size,
-        "household_monthly_income": household_income,
-        "program_eligible": True if suggested_programs else None,
-        "suggested_programs": suggested_programs,
-        "probabilities": probability_result,
-    }
+    "vulnerability": vulnerability,
+    "vulnerability_prob": None,
+    "rf_vulnerability": rf_vulnerability,
+    "rf_vulnerability_prob": rf_probability,
+    "classification_source": classification_source,
+    "household_composition": composition,
+    "member_count": member_count,
+    "family_size": family_size,
+    "household_monthly_income": household_income,
+    "program_eligible": True if suggested_programs else None,
+    "suggested_programs": suggested_programs,
+    "probabilities": probability_result,
+}
 
 
 # ============================================================
