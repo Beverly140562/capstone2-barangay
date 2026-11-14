@@ -28,7 +28,7 @@ const CONTACTS = [
 export default function Contact() {
   const navItem =
     'rounded-md px-3 py-2 text-sm font-semibold text-white/85 transition hover:bg-white/10 ' +
-    'hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white md:text-xl';
+    'hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white md:text-2xl';
   const navActive = 'bg-white/15 text-white';
 
   return (
