@@ -24,7 +24,8 @@ function History() {
   const [expandedHousehold, setExpandedHousehold] = useState(null);
   const [selectedHousehold, setSelectedHousehold] = useState(null);
   const [error, setError] = useState('');
- 
+  const [expandedCalamityHousehold, setExpandedCalamityHousehold] = useState(null);
+  const [selectedCalamityHousehold, setSelectedCalamityHousehold] = useState(null);
 
 
   useEffect(() => {
@@ -142,13 +143,32 @@ function History() {
   }, [filteredHistory]);
 
 
+  const groupedCalamityHouseholds = useMemo(() => {
+  const groups = {};
 
-const formatCurrency = (amount) =>
-  new Intl.NumberFormat('en-PH', {
-    style: 'currency',
-    currency: 'PHP',
-    minimumFractionDigits: 2,
-  }).format(Number(amount) || 0);
+  calamityHistory.forEach((item) => {
+    const householdId = item.household_id;
+
+    if (!householdId) return;
+
+    if (!groups[householdId]) {
+      groups[householdId] = {
+        household_id: householdId,
+        household_head_name: item.household_head_name,
+        purok: item.purok,
+        address: item.address,
+        vulnerability: item.vulnerability || '—',
+        programs: [],
+      };
+    }
+
+    groups[householdId].programs.push(item);
+  });
+
+  return Object.values(groups);
+}, [calamityHistory]);
+
+
 
   // ============================================================
   // STATUS HELPERS
@@ -622,100 +642,6 @@ const getDecisionMaker = (program) => {
         )}
       </div>
 
-{/* ========================================================
-    CALAMITY PROGRAM BENEFICIARIES
-======================================================== */}
-<div className="mt-8 rounded-xl border border-gray-200 bg-white shadow-sm">
-
-  <div className="border-b border-gray-200 bg-[#FFF7F7] px-5 py-4">
-    <h2 className="text-3xl font-bold text-[#6E2430]">
-      Calamity Program Beneficiaries
-    </h2>
-
-    <p className="text-xl text-gray-500">
-      Households approved for calamity assistance.
-    </p>
-
-    <p className="mt-2 text-xl font-semibold text-[#6E2430]">
-      {calamityHistory.length} approved beneficiary
-      {calamityHistory.length !== 1 ? 'ies' : ''}
-    </p>
-  </div>
-
-  {loading ? (
-    <div className="flex justify-center py-12">
-      <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-[#6E2430]" />
-    </div>
-  ) : calamityHistory.length === 0 ? (
-    <div className="py-12 text-center">
-      <FileText
-        size={50}
-        className="mx-auto mb-3 text-gray-300"
-      />
-
-      <p className="text-xl font-semibold text-gray-500">
-        No approved calamity program beneficiaries found.
-      </p>
-    </div>
-  ) : (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[1100px] text-left">
-        <thead>
-          <tr className="border-b border-gray-200 text-xl text-gray-500">
-            <th className="px-5 py-4">Household Head</th>
-            <th className="px-5 py-4">Purok</th>
-            <th className="px-5 py-4">Calamity Program</th>
-            <th className="px-5 py-4">Risk Level</th>
-            <th className="px-5 py-4">Approved By</th>
-            <th className="px-5 py-4">Date Approved</th>
-            <th className="px-5 py-4">Status</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {calamityHistory.map((item) => (
-            <tr
-              key={item.calamity_id}
-              className="border-b border-gray-100 last:border-0 hover:bg-gray-50"
-            >
-              <td className="px-5 py-4 text-xl font-semibold text-gray-800">
-                {item.household_head_name || '—'}
-              </td>
-
-              <td className="px-5 py-4 text-xl text-gray-700">
-                {item.purok || '—'}
-              </td>
-
-              <td className="px-5 py-4 text-xl text-gray-700">
-                {item.program_name || '—'}
-              </td>
-
-              <td className="px-5 py-4 text-xl text-gray-700">
-                {item.risk_level || '—'}
-              </td>
-
-              <td className="px-5 py-4 text-xl text-gray-700">
-                {item.approved_by_name || '—'}
-              </td>
-
-              <td className="px-5 py-4 text-xl text-gray-600">
-                {formatDate(item.approved_at)}
-              </td>
-
-              <td className="px-5 py-4">
-                <span className="inline-flex items-center gap-2 rounded-full border border-green-200 bg-green-100 px-3 py-1 text-lg font-semibold text-green-700">
-                  <CheckCircle size={18} />
-                  Approved
-                </span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )}
-</div>
-
 
       {/* ========================================================
           HOUSEHOLD DETAILS MODAL
@@ -884,6 +810,213 @@ const getDecisionMaker = (program) => {
           </div>
         </div>
       )}
+
+
+{/* ========================================================
+    CALAMITY HOUSEHOLD DETAILS MODAL
+======================================================== */}
+{selectedCalamityHousehold && (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+    onClick={() => setSelectedCalamityHousehold(null)}
+  >
+    <div
+      className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
+      onClick={(e) => e.stopPropagation()}
+    >
+
+      {/* HEADER */}
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white px-6 py-5">
+
+        <div>
+          <h2 className="text-3xl font-bold text-[#6E2430]">
+            Household Details
+          </h2>
+
+          <p className="text-xl text-gray-500">
+            Calamity assistance program history
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setSelectedCalamityHousehold(null)}
+          className="rounded-full p-2 text-gray-500 hover:bg-gray-100"
+        >
+          <X size={30} />
+        </button>
+
+      </div>
+
+      {/* HOUSEHOLD INFORMATION */}
+      <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+
+        <div className="rounded-lg bg-gray-50 p-4">
+          <p className="text-xl text-gray-500">
+            Household Head
+          </p>
+
+          <p className="mt-1 text-xl font-bold text-gray-800">
+            {selectedCalamityHousehold.household_head_name || '—'}
+          </p>
+        </div>
+
+        <div className="rounded-lg bg-gray-50 p-4">
+          <p className="text-xl text-gray-500">
+            Purok
+          </p>
+
+          <p className="mt-1 text-xl font-bold text-gray-800">
+            {selectedCalamityHousehold.purok || '—'}
+          </p>
+        </div>
+
+        <div className="rounded-lg bg-gray-50 p-4">
+          <p className="text-xl text-gray-500">
+            Address
+          </p>
+
+          <p className="mt-1 text-xl font-bold text-gray-800">
+            {selectedCalamityHousehold.address || '—'}
+          </p>
+        </div>
+
+      </div>
+
+      {/* CALAMITY PROGRAM HISTORY */}
+      <div className="px-6 pb-6">
+
+        <h3 className="mb-3 text-2xl font-bold text-[#6E2430]">
+          Calamity Program History
+        </h3>
+
+        <div className="space-y-3">
+
+          {selectedCalamityHousehold.programs.map((program) => (
+            <div
+              key={program.calamity_id}
+              className="rounded-xl border border-gray-200 p-4"
+            >
+
+              <div className="flex flex-col text-xl gap-3 md:flex-row md:items-start md:justify-between">
+
+                <div>
+
+                  <p className="font-bold text-gray-800">
+                    {program.program_name || '—'}
+                  </p>
+
+                  <p className="mt-1 text-xl text-gray-500">
+                    Approved by:{' '}
+                    <span className="font-medium text-gray-700">
+                      {program.approved_by_name || '—'}
+                    </span>
+                  </p>
+
+                  <p className="text-xl text-gray-500">
+                    Date:{' '}
+                    {formatDate(program.approved_at)}
+                  </p>
+
+                </div>
+
+                <span
+                  className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xl font-semibold ${getStatusStyle(
+                    program.status
+                  )}`}
+                >
+                  {getStatusIcon(program.status)}
+                  {program.status || '—'}
+                </span>
+
+              </div>
+
+              {/* DAMAGE DETAILS */}
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-lg font-semibold uppercase text-gray-500">
+                    Risk Level
+                  </p>
+
+                  <p className="mt-1 text-xl text-gray-700">
+                    {program.risk_level || '—'}
+                  </p>
+                </div>
+
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-lg font-semibold uppercase text-gray-500">
+                    House Type
+                  </p>
+
+                  <p className="mt-1 text-xl text-gray-700">
+                    {program.house_type || '—'}
+                  </p>
+                </div>
+
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-lg font-semibold uppercase text-gray-500">
+                    Roof Damage
+                  </p>
+
+                  <p className="mt-1 text-xl text-gray-700">
+                    {program.roof_damage || '—'}
+                  </p>
+                </div>
+
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-lg font-semibold uppercase text-gray-500">
+                    Wall Damage
+                  </p>
+
+                  <p className="mt-1 text-xl text-gray-700">
+                    {program.wall_damage || '—'}
+                  </p>
+                </div>
+
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-lg font-semibold uppercase text-gray-500">
+                    Flooding Level
+                  </p>
+
+                  <p className="mt-1 text-xl text-gray-700">
+                    {program.flooding_level || '—'}
+                  </p>
+                </div>
+
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-lg font-semibold uppercase text-gray-500">
+                    Damage Risk Score
+                  </p>
+
+                  <p className="mt-1 text-xl text-gray-700">
+                    {program.damage_risk ?? '—'}
+                  </p>
+                </div>
+
+              </div>
+
+              {/* REMARKS */}
+              <div className="mt-3 rounded-lg bg-gray-50 p-3">
+                <p className="text-xl font-semibold uppercase text-gray-500">
+                  Remarks
+                </p>
+
+                <p className="mt-1 text-xl text-gray-700">
+                  {program.rejection_reason || 'No remarks'}
+                </p>
+              </div>
+
+            </div>
+          ))}
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+)}
+
 
     </div>
   );
