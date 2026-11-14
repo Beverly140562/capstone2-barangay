@@ -545,7 +545,21 @@ if (role === 'admin') {
   requests.push(api.get('/users'));
 }
 
-const results = await Promise.all(requests);
+const results = await Promise.all(
+  requests.map(async (request, index) => {
+    try {
+      const result = await request;
+      console.log(`Dashboard request ${index + 1} succeeded:`, result);
+      return result;
+    } catch (err) {
+      console.error(
+        `Dashboard request ${index + 1} failed:`,
+        err?.response?.data || err
+      );
+      throw err;
+    }
+  })
+);
 
         if (cancelled) {
           return;

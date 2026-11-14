@@ -36,23 +36,31 @@ router.get('/summary', async (req, res) => {
     `);
 
     // -------------------------------------------------------
-    // APPROVED HOUSEHOLDS
-    // -------------------------------------------------------
-    const approved = await query(`
-      (
-  SELECT COUNT(DISTINCT approved.household_id)::int
+// APPROVED HOUSEHOLDS
+// Includes regular and calamity approvals.
+// Counts each household only once.
+// -------------------------------------------------------
+const approved = await query(`
+  SELECT
+    COUNT(DISTINCT approved.household_id)::int AS n
   FROM (
+    -- Regular beneficiary approvals
     SELECT bv.household_id
     FROM beneficiary_validation bv
-    WHERE LOWER(TRIM(COALESCE(bv.validation_status, ''))) = 'approved'
+    WHERE LOWER(
+      TRIM(COALESCE(bv.validation_status, ''))
+    ) = 'approved'
 
     UNION
 
+    -- Calamity beneficiary approvals
     SELECT cp.household_id
     FROM calamity_programs cp
-    WHERE LOWER(TRIM(COALESCE(cp.status, ''))) = 'approved'
-  ) approved
-) AS approved_beneficiaries`);
+    WHERE LOWER(
+      TRIM(COALESCE(cp.status, ''))
+    ) = 'approved'
+  ) AS approved
+`);
 
     // -------------------------------------------------------
     // PENDING HOUSEHOLDS
