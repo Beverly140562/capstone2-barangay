@@ -1233,7 +1233,10 @@ def predict_one(
     )
 
     if not head_education:
-    head_education = None
+        raise HTTPException(
+            status_code=422,
+            detail="Household head education is missing.",
+        )
 
     # ========================================================
     # RANDOM FOREST INPUT
