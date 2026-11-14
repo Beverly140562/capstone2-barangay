@@ -20,6 +20,19 @@ function isYes(value) {
   );
 }
 
+function isExplicitlyUnemployed(occupation) {
+  const value = String(occupation ?? '')
+    .trim()
+    .toLowerCase();
+
+  return [
+    'unemployed',
+    'not employed',
+    'none',
+    'no occupation',
+  ].includes(value);
+}
+
 function normalizeSuggestedPrograms(programs) {
   if (!Array.isArray(programs)) {
     return [];
@@ -103,6 +116,11 @@ async function predictHousehold(household) {
   // Check whether the household has an illness indicator.
   const hasIllness = isYes(household.leading_illnesses);
 
+  const allMembersExplicitlyUnemployed = [
+  household.occupation,
+  ...members.map((member) => member.occupation),
+].every(isExplicitlyUnemployed);
+
   // Retrieve active assistance programs dynamically.
   const programs = await query(
     `
@@ -148,6 +166,10 @@ async function predictHousehold(household) {
       household.highest_education ?? null,
 
     occupation: household.occupation ?? null,
+
+    all_members_explicitly_unemployed:
+      allMembersExplicitlyUnemployed,
+
     residence: household.residence ?? null,
     family_position: household.family_position ?? null,
 

@@ -1030,35 +1030,51 @@ if (incomeProofFiles.length > 0) {
         }
       }
 
-
-      // --------------------------------------------------------
-      // SUCCESS
-      // --------------------------------------------------------
-
-      
 // --------------------------------------------------------
 // AUTOMATICALLY REFRESH RANDOM FOREST PREDICTION
 // --------------------------------------------------------
 
 let predictionUpdated = false;
+let predictionErrorMessage = '';
 
 try {
-  await api.post(
+  const predictionResponse = await api.post(
     `/households/${encodeURIComponent(householdId)}/predict`
   );
 
   predictionUpdated = true;
 
-  console.log('Household vulnerability prediction refreshed.');
+  console.log(
+    'Household vulnerability prediction refreshed:',
+    predictionResponse
+  );
+
 } catch (predictionError) {
+  const errorData =
+    predictionError?.response?.data ||
+    predictionError?.data ||
+    null;
+
+  predictionErrorMessage =
+    errorData?.error ||
+    errorData?.message ||
+    predictionError?.message ||
+    'Unknown prediction error';
+
   console.error(
     'Automatic vulnerability prediction failed:',
-    predictionError
+    {
+      householdId,
+      message: predictionError?.message,
+      status: predictionError?.response?.status,
+      response: errorData,
+      error: predictionError,
+    }
   );
 }
 
 // --------------------------------------------------------
-// SUCCESS
+// SAVE RESULT
 // --------------------------------------------------------
 
 if (predictionUpdated) {
@@ -1069,7 +1085,8 @@ if (predictionUpdated) {
   );
 } else {
   toast.error(
-    'Household saved, but vulnerability classification could not be refreshed. Please try again.'
+    `Household saved, but classification failed: ${predictionErrorMessage}`,
+    { duration: 8000 }
   );
 }
 

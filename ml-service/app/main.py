@@ -1276,23 +1276,17 @@ def predict_one(
         for label, prob in zip(classes, probabilities)
     }
 
+        # ========================================================
+    # FINAL VULNERABILITY FROM RANDOM FOREST
     # ========================================================
-    # FINAL VULNERABILITY BASED ON TOTAL HOUSEHOLD INCOME
-    # ========================================================
 
-    if household_income <= 10999:
-        vulnerability = "High Vulnerable"
+    vulnerability = rf_vulnerability
+    vulnerability_probability = rf_probability
 
-    elif household_income <= 24999:
-        vulnerability = "Moderate Vulnerable"
+    classification_source = "Random Forest"
 
-    else:
-        vulnerability = "Low Vulnerable"
-
-    classification_source = "Household Income Classification"
-
-    print("[ML] Random Forest:", rf_vulnerability)
-    print("[ML] Household Income:", household_income)
+    print("[ML] Random Forest Prediction:", rf_vulnerability)
+    print("[ML] Random Forest Probability:", rf_probability)
     print("[ML] Final Vulnerability:", vulnerability)
 
     # ========================================================
@@ -1330,7 +1324,7 @@ def predict_one(
 
     return {
         "vulnerability": vulnerability,
-        "vulnerability_prob": None,
+        "vulnerability_prob": vulnerability_probability,
         "rf_vulnerability": rf_vulnerability,
         "rf_vulnerability_prob": rf_probability,
         "classification_source": classification_source,
