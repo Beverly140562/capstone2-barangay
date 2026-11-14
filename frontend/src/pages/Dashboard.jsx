@@ -596,15 +596,17 @@ const calamityResponse =
             householdResponse
           );
 
-        /* ------------------------------------------------------
-   HISTORY
+/* ------------------------------------------------------
+   SAVE API DATA INTO REACT STATES
 ------------------------------------------------------ */
 
-// The updated history endpoint already returns:
-// 1. Regular beneficiary records
-// 2. Calamity beneficiary records
+setSummary(summaryData);
+setHouseholds(householdData);
+setHistory(historyData);
 
-const historyData = getHistory(historyResponse);
+/* ------------------------------------------------------
+   HISTORY DEBUG
+------------------------------------------------------ */
 
 console.log(
   'Dashboard combined beneficiary history:',
@@ -628,29 +630,23 @@ console.log(
       record.record_type === 'Calamity'
   )
 );
-        /* ------------------------------------------------------
-           HOUSEHOLDS THIS MONTH
-        ------------------------------------------------------ */
 
-        const monthlyHouseholds =
-          householdData.filter(
-            (household) =>
-              isThisMonth(
-                getHouseholdDate(
-                  household
-                )
-              )
-          ).length;
+/* ------------------------------------------------------
+   HOUSEHOLDS THIS MONTH
+------------------------------------------------------ */
 
-        setHouseholdsThisMonth(
-          monthlyHouseholds
-        );
+const monthlyHouseholds = householdData.filter(
+  (household) =>
+    isThisMonth(getHouseholdDate(household))
+).length;
 
-        /* ------------------------------------------------------
-           APPROVED BENEFICIARIES THIS MONTH
-        ------------------------------------------------------ */
+setHouseholdsThisMonth(monthlyHouseholds);
 
-        const monthlyApproved = new Set(
+/* ------------------------------------------------------
+   APPROVED BENEFICIARIES THIS MONTH
+------------------------------------------------------ */
+
+const monthlyApproved = new Set(
   historyData
     .filter(
       (record) =>
@@ -662,23 +658,19 @@ console.log(
     .map((id) => String(id))
 ).size;
 
-        setApprovedThisMonth(
-          monthlyApproved
-        );
+setApprovedThisMonth(monthlyApproved);
 
-        /* ------------------------------------------------------
-           ADMIN USERS
-        ------------------------------------------------------ */
+/* ------------------------------------------------------
+   ADMIN USERS
+------------------------------------------------------ */
 
-        if (role === 'admin') {
-  setUsers(
-    getUsers(
-      results[3] ?? {}
-    )
-  );
+if (role === 'admin') {
+  const userData = getUsers(results[3] ?? {});
+  setUsers(userData);
 } else {
   setUsers([]);
-}
+}   
+
       } catch (e) {
         if (cancelled) {
           return;
