@@ -5,7 +5,6 @@ import toast, { Toaster } from 'react-hot-toast';
 
 import { api } from '../lib/api';
 import { mlApi } from '../lib/mlApi';
-
 import {
   PageHeader,
   Band,
@@ -1416,7 +1415,7 @@ const loadRecords = async () => {
       setAnalyticsData(result);
       setRecords([]);
 
-      toast.success('Analytical summary loaded.');
+     
       return;
     }
 
