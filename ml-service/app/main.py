@@ -270,10 +270,6 @@ def has_disability(value) -> bool:
 # ANALYTICS FILTER HELPERS
 # ============================================================
 
-# ============================================================
-# ANALYTICS FILTER HELPERS
-# ============================================================
-
 def normalize(value):
     if value is None:
         return ""
@@ -843,39 +839,23 @@ def has_income_proof(value) -> bool:
 
     if isinstance(value, list):
         return any(
-            str(item).strip()
+            isinstance(item, str) and item.strip()
             for item in value
-            if item is not None
         )
-
-    if isinstance(value, dict):
-        return bool(value)
 
     if isinstance(value, str):
         value = value.strip()
 
-        if not value:
+        if not value or value.lower() in {
+            "null", "none", "[]", "{}", "false"
+        }:
             return False
 
         try:
             parsed = json.loads(value)
-
-            if isinstance(parsed, list):
-                return has_income_proof(parsed)
-
-            if isinstance(parsed, dict):
-                return bool(parsed)
-
-            return bool(parsed)
-
+            return has_income_proof(parsed)
         except (json.JSONDecodeError, TypeError):
-            return value.lower() not in {
-                "null",
-                "none",
-                "[]",
-                "{}",
-                "false",
-            }
+            return True
 
     return False
 
@@ -891,7 +871,6 @@ def normalize_rule(value: str | None) -> str:
     return " ".join(str(value).strip().lower().split())
 
 
-
 def match_programs(
     household: Household,
     vulnerability: str,
@@ -900,20 +879,35 @@ def match_programs(
 
     matched_programs = []
 
-        # Income proof is required before suggesting assistance.
+    # Only the household head's proof is checked.
     proof_available = has_income_proof(
         household.income_proof_images
     )
 
+    print(
+        "[PROGRAM MATCHING] Household income proof:",
+        household.income_proof_images,
+        flush=True,
+    )
+    print(
+        "[PROGRAM MATCHING] Proof available:",
+        proof_available,
+        flush=True,
+    )
+
     if not proof_available:
         print(
-            "[PROGRAM MATCHING] No income proof uploaded. "
-            "Vulnerability classification is retained, "
-            "but assistance suggestions are disabled."
+            "[PROGRAM MATCHING] No proof. Suggestions disabled.",
+            flush=True,
         )
         return []
 
-    income = household.monthly_income
+    # Use combined household income.
+    income = (
+        household.household_monthly_income
+        if household.household_monthly_income is not None
+        else household.monthly_income
+    )
 
     family_size = (
         household.family_size
@@ -926,6 +920,21 @@ def match_programs(
 
     normalized_vulnerability = normalize_rule(vulnerability)
 
+    vulnerability_aliases = {
+        "high": "high vulnerable",
+        "high vulnerable": "high vulnerable",
+        "medium": "moderate vulnerable",
+        "moderate": "moderate vulnerable",
+        "moderate vulnerable": "moderate vulnerable",
+        "low": "low vulnerable",
+        "low vulnerable": "low vulnerable",
+    }
+
+    normalized_vulnerability = vulnerability_aliases.get(
+        normalized_vulnerability,
+        normalized_vulnerability,
+    )
+
     for program in programs:
 
         raw_rules = program.eligibility_rules
@@ -933,7 +942,6 @@ def match_programs(
         if not raw_rules:
             continue
 
-        # Read structured JSON rules or an existing dictionary.
         if isinstance(raw_rules, dict):
             rules = raw_rules
 
@@ -945,71 +953,31 @@ def match_programs(
                     continue
 
             except (json.JSONDecodeError, TypeError):
+                print(
+                    f"[PROGRAM MATCHING] Invalid rules: {program.program_name}",
+                    flush=True,
+                )
+                continue
 
-                # Backward compatibility for old comma-separated rules.
-                legacy = [
-                    normalize_rule(item)
-                    for item in str(raw_rules).split(",")
-                    if item.strip()
-                ]
-
-                rules = {
-                    "vulnerability_levels": [
-                        item.title()
-                        for item in legacy
-                        if item in [
-                            "high vulnerable",
-                            "moderate vulnerable",
-                            "low vulnerable",
-                        ]
-                    ],
-                    "household_conditions": [],
-                    "monthly_income_max": None,
-                }
-
-                if "senior citizen" in legacy:
-                    rules["household_conditions"].append(
-                        "senior_citizen"
-                    )
-
-                if "person with disability" in legacy:
-                    rules["household_conditions"].append(
-                        "person_with_disability"
-                    )
-
-                if "family size >= 6" in legacy:
-                    rules["household_conditions"].append(
-                        "family_size_gte_6"
-                    )
-
-                if "family size >= 5" in legacy:
-                    rules["household_conditions"].append(
-                        "family_size_gte_5"
-                    )
-
-                for item in legacy:
-                    if item.startswith("monthly income <="):
-                        try:
-                            rules["monthly_income_max"] = float(
-                                item.split("<=", 1)[1].strip()
-                            )
-                        except ValueError:
-                            pass
-
-        # VULNERABILITY GROUP
+        # VULNERABILITY CHECK
         vulnerability_levels = rules.get(
             "vulnerability_levels", []
         )
 
+        normalized_levels = [
+            vulnerability_aliases.get(
+                normalize_rule(level),
+                normalize_rule(level),
+            )
+            for level in vulnerability_levels
+        ]
+
         vulnerability_match = (
-            not vulnerability_levels
-            or normalized_vulnerability in [
-                normalize_rule(level)
-                for level in vulnerability_levels
-            ]
+            not normalized_levels
+            or normalized_vulnerability in normalized_levels
         )
 
-        # HOUSEHOLD CONDITIONS GROUP
+        # HOUSEHOLD CONDITIONS CHECK
         conditions = rules.get(
             "household_conditions", []
         )
@@ -1026,44 +994,66 @@ def match_programs(
             elif condition == "person_with_disability":
                 condition_results.append(disability is True)
 
-            elif condition == "family_size_gte_6":
-                condition_results.append(
-                    family_size is not None and family_size >= 6
-                )
-
-            elif condition == "family_size_gte_5":
-                condition_results.append(
-                    family_size is not None and family_size >= 5
-                )
-            elif condition == "family_size_gte_4":
-                condition_results.append(
-                    family_size is not None and family_size >= 4
-                )
+            elif condition.startswith("family_size_gte_"):
+                try:
+                    minimum_size = int(
+                        condition.rsplit("_", 1)[1]
+                    )
+                    condition_results.append(
+                        family_size is not None
+                        and family_size >= minimum_size
+                    )
+                except ValueError:
+                    condition_results.append(False)
 
             else:
-                # Unknown conditions must not qualify.
                 condition_results.append(False)
 
         household_match = (
             not conditions or any(condition_results)
         )
 
-        # MONTHLY INCOME GROUP
-        income_limit = rules.get("monthly_income_max")
-
-        income_match = (
-            income_limit is None
-            or (
-                income is not None
-                and income <= float(income_limit)
-            )
+        # INCOME LIMIT CHECK
+        income_limit = rules.get(
+            "monthly_income_max",
+            rules.get(
+                "household_monthly_income_max",
+                rules.get("income_max"),
+            ),
         )
 
-        # ALL CONFIGURED GROUPS MUST MATCH
+        try:
+            if isinstance(income_limit, str):
+                income_limit = (
+                    income_limit.replace("₱", "")
+                    .replace(",", "")
+                    .strip()
+                )
+
+            income_match = (
+                income_limit is None
+                or (
+                    income is not None
+                    and float(income) <= float(income_limit)
+                )
+            )
+
+        except (ValueError, TypeError):
+            income_match = False
+
         eligible = (
             vulnerability_match
             and household_match
             and income_match
+        )
+
+        print(
+            f"[PROGRAM MATCHING] {program.program_name}: "
+            f"vulnerability={vulnerability_match}, "
+            f"conditions={household_match}, "
+            f"income={income_match}, "
+            f"eligible={eligible}",
+            flush=True,
         )
 
         if eligible:
@@ -1075,7 +1065,6 @@ def match_programs(
             })
 
     return matched_programs
-
 # ============================================================
 # COLAB RANDOM FOREST PREDICTION
 # ============================================================
@@ -1441,12 +1430,34 @@ def health():
 # ============================================================
 # SINGLE PREDICTION
 # ============================================================
-
 @app.post("/predict")
 def predict(request: PredictionRequest):
     try:
-        print("[ML] Household composition:", request.household.family_position)
-        print("[ML] Members received:", len(request.members))
+        print(
+            "[ML] Household composition:",
+            request.household.family_position,
+            flush=True,
+        )
+
+        print(
+            "[ML] Members received:",
+            len(request.members),
+            flush=True,
+        )
+
+        print(
+            "[ML] Household proof received:",
+            request.household.income_proof_images,
+            flush=True,
+        )
+
+        print(
+            "[ML] Household proof detected:",
+            has_income_proof(
+                request.household.income_proof_images
+            ),
+            flush=True,
+        )
 
         result = predict_one(
             request.household,
@@ -1454,9 +1465,17 @@ def predict(request: PredictionRequest):
             request.members,
         )
 
-        print("[ML] Prediction:", result["vulnerability"])
-        print("[ML] Household composition:", result["household_composition"])
-        print("[ML] Suggested programs:", result["suggested_programs"])
+        print(
+            "[ML] Prediction:",
+            result["vulnerability"],
+            flush=True,
+        )
+
+        print(
+            "[ML] Suggested programs:",
+            result["suggested_programs"],
+            flush=True,
+        )
 
         return result
 
@@ -1471,10 +1490,7 @@ def predict(request: PredictionRequest):
             status_code=500,
             detail=f"Prediction failed: {type(exc).__name__}: {exc}",
         ) from exc
-
-# ============================================================
-# BATCH PREDICTION
-# ============================================================
+    
 # ============================================================
 # BATCH PREDICTION
 # ============================================================
