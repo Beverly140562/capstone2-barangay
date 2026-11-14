@@ -571,65 +571,35 @@ const results = await Promise.all(
         const householdResponse =
           results[1] ?? {};
 
-        const historyResponse =
-  results[2] ?? {};
-
-const calamityResponse =
-  results[3] ?? {};
-
         /* ------------------------------------------------------
-           SUMMARY
-        ------------------------------------------------------ */
+   SUMMARY
+------------------------------------------------------ */
 
-        const summaryData =
-          summaryResponse?.summary ??
-          summaryResponse?.data ??
-          summaryResponse ??
-          {};
-
-        /* ------------------------------------------------------
-           HOUSEHOLDS
-        ------------------------------------------------------ */
-
-        const householdData =
-          getHouseholds(
-            householdResponse
-          );
+const summaryData =
+  summaryResponse?.summary ??
+  summaryResponse?.data ??
+  summaryResponse ??
+  {};
 
 /* ------------------------------------------------------
-   SAVE API DATA INTO REACT STATES
+   HOUSEHOLDS
+------------------------------------------------------ */
+
+const householdData = getHouseholds(householdResponse);
+
+/* ------------------------------------------------------
+   HISTORY
+------------------------------------------------------ */
+
+const historyData = getHistory(historyResponse);
+
+/* ------------------------------------------------------
+   SAVE DATA INTO STATES
 ------------------------------------------------------ */
 
 setSummary(summaryData);
 setHouseholds(householdData);
 setHistory(historyData);
-
-/* ------------------------------------------------------
-   HISTORY DEBUG
------------------------------------------------------- */
-
-console.log(
-  'Dashboard combined beneficiary history:',
-  historyData
-);
-
-console.log(
-  'Regular approved:',
-  historyData.filter(
-    (record) =>
-      isHistoryApproved(record) &&
-      record.record_type !== 'Calamity'
-  )
-);
-
-console.log(
-  'Calamity approved:',
-  historyData.filter(
-    (record) =>
-      isHistoryApproved(record) &&
-      record.record_type === 'Calamity'
-  )
-);
 
 /* ------------------------------------------------------
    HOUSEHOLDS THIS MONTH
@@ -655,7 +625,7 @@ const monthlyApproved = new Set(
     )
     .map((record) => record?.household_id)
     .filter(Boolean)
-    .map((id) => String(id))
+    .map(String)
 ).size;
 
 setApprovedThisMonth(monthlyApproved);
@@ -665,11 +635,10 @@ setApprovedThisMonth(monthlyApproved);
 ------------------------------------------------------ */
 
 if (role === 'admin') {
-  const userData = getUsers(results[3] ?? {});
-  setUsers(userData);
+  setUsers(getUsers(results[3] ?? {}));
 } else {
   setUsers([]);
-}   
+}
 
       } catch (e) {
         if (cancelled) {
