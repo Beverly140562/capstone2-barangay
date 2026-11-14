@@ -681,24 +681,6 @@ if (role === 'admin') {
       [households]
     );
 
-  const approvedHouseholds =
-    useMemo(
-      () =>
-        households.filter(
-          isApproved
-        ),
-      [households]
-    );
-
-  const rejectedHouseholds =
-    useMemo(
-      () =>
-        households.filter(
-          isRejected
-        ),
-      [households]
-    );
-
   const priorityHouseholds =
     useMemo(
       () =>
@@ -1232,46 +1214,16 @@ if (role === 'admin') {
     const pendingHouseholds =
       validatedHouseholds;
 
-    const onlineAccounts =
-      users.filter(
-        isUserOnline
-      ).length;
+    // Count all registered accounts, regardless of role.
+const totalAccounts = users.length;
 
-    const staffCount =
-      users.filter(
-        (account) => {
-          const roles =
-            account?.roles ??
-            account?.role ??
-            '';
+// Count all accounts currently online.
+const onlineAccounts = users.filter(isUserOnline).length;
 
-          if (Array.isArray(roles)) {
-            return roles.some(
-              (item) =>
-                String(
-                  typeof item === 'object'
-                    ? item?.name ??
-                      item?.role ??
-                      ''
-                    : item
-                )
-                  .trim()
-                  .toLowerCase() ===
-                'staff'
-            );
-          }
-
-          return String(roles)
-            .trim()
-            .toLowerCase()
-            .includes('staff');
-        }
-      ).length;
-
-    const totalHouseholds =
-      Number(
-        summary?.total_households
-      ) || households.length;
+      const totalHouseholds =
+        Number(
+          summary?.total_households
+        ) || households.length;
 
     return (
       <div className="space-y-6">
@@ -1301,7 +1253,7 @@ if (role === 'admin') {
 
           <Stat
             label="STAFF ACCOUNTS"
-            value={staffCount}
+            value={totalAccounts}
             note={`${onlineAccounts} online accounts`}
           />
 
