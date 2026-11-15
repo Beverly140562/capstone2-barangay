@@ -73,7 +73,7 @@ router.get(
           h.household_head_name,
           h.purok,
           h.vulnerability,
-          h.vulnerability_prob,
+          h.probabilities,
           h.monthly_income,
           h.family_number,
           h.validation_status AS household_validation_status,
