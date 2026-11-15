@@ -1069,13 +1069,13 @@ const closeCalamityDecision = () => {
 
       {selectedCalamity && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 scr"
           role="dialog"
           aria-modal="true"
           onClick={closeCalamityDecision}
         >
           <div
-            className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-white p-6 shadow-xl"
+            className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-xl bg-white p-6 shadow-xl scrollbar-hide"
             onClick={(e) =>
               e.stopPropagation()
             }
@@ -1088,7 +1088,7 @@ const closeCalamityDecision = () => {
                 : 'Return Calamity Request'}
             </h3>
 
-            <p className="mt-2 text-xl leading-6 text-muted">
+            <p className="mt-2 text-2xl leading-6 text-bold text-ink">
               {selectedCalamity.decision ===
               'Approved'
                 ? `Approve "${
