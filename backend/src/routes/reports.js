@@ -342,7 +342,7 @@ const QUERIES = {
       h.monthly_income,
       h.validation_status,
       h.vulnerability,
-      h.vulnerability_prob,
+      h.probabilities,
       h.suggested_programs,
       h.created_at
     FROM households h
@@ -367,7 +367,7 @@ const QUERIES = {
       h.address,
       h.monthly_income,
       h.vulnerability,
-      h.vulnerability_prob,
+      h.probabilities,
       h.family_number,
 
       p.program_name

@@ -116,7 +116,6 @@ function getClassification(row) {
 function getStatus(row) {
   return (
     row?.validation_status ||
-    row?.release_status ||
     row?.approval_status ||
     null
   );
@@ -183,8 +182,8 @@ function isHighOrMediumVulnerability(row) {
   return [
     'high',
     'medium',
-    'highly vulnerable',
-    'moderately vulnerable',
+    'high vulnerable',
+    'moderate vulnerable',
     'high vulnerability',
     'moderate vulnerability',
   ].includes(value);
@@ -269,10 +268,6 @@ function isIncompleteAssistanceInformation(row) {
 function getRecordDate(row) {
   return (
     row?.approved_at ||
-    row?.release_date ||
-    row?.released_at ||
-    row?.releaseDate ||
-    row?.distributed_at ||
     row?.report_date ||
     row?.created_at ||
     null
@@ -501,7 +496,7 @@ function emptyAnalytics() {
     decided_household_count: 0,
     approval_rate: 0,
     coverage: 0,
-    highly_vulnerable: 0,
+    high_vulnerable: 0,
   };
 }
 
@@ -547,7 +542,7 @@ function getAnalyticsData(value) {
     ),
     approval_rate: num(value.approval_rate),
     coverage: num(value.coverage),
-    highly_vulnerable: num(value.highly_vulnerable),
+    high_vulnerable: num(value.high_vulnerable),
   };
 }
 
@@ -1030,9 +1025,9 @@ function AnalyticsSummary({
     },
     {
       label:
-        'HIGHLY VULNERABLE',
+        'High VULNERABLE',
       value:
-        data.highly_vulnerable,
+        data.high_vulnerable,
     },
     {
       label:
@@ -2081,8 +2076,8 @@ async function downloadExcelFile(rows, filename) {
                 data.total_households,
               ],
               [
-                'HIGHLY VULNERABLE',
-                data.highly_vulnerable,
+                'High VULNERABLE',
+                data.high_vulnerable,
               ],
               [
                 'APPROVAL RATE',
@@ -2117,7 +2112,7 @@ async function downloadExcelFile(rows, filename) {
         ];
 
         const VULNERABILITY_COLORS = {
-          'highly vulnerable': [116, 31, 45],
+          'high vulnerable': [116, 31, 45],
           'high vulnerability': [116, 31, 45],
           'moderately vulnerable': [201, 137, 68],
           'moderate vulnerability': [201, 137, 68],
@@ -2213,8 +2208,8 @@ const charts = [
                 data.total_households,
               ],
               [
-                'Highly Vulnerable',
-                data.highly_vulnerable,
+                'High Vulnerable',
+                data.high_vulnerable,
               ],
               [
                 'Approved Households',
@@ -2635,8 +2630,8 @@ try {
         ],
 
         [
-          'Highly Vulnerable',
-          data.highly_vulnerable,
+          'High Vulnerable',
+          data.high_vulnerable,
         ],
 
         [
@@ -2726,7 +2721,7 @@ const buildAnalyticsExcelRows = (analytics) => {
     ['ANALYTICAL SUMMARY', ''],
     ['Metric', 'Value'],
     ['Total Households', data.total_households],
-    ['Highly Vulnerable', data.highly_vulnerable],
+    ['High Vulnerable', data.high_vulnerable],
     ['Approved Households', data.approved_household_count],
     ['Rejected', data.rejected_count],
     ['Decided Households', data.decided_household_count],

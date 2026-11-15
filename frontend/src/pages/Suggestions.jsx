@@ -1461,20 +1461,6 @@ const handleAddAll = () => {
             </div>
           </div>
 
-
-          <p className="mt-2 text-xl text-gray-500">
-            Households already submitted as
-            Pending or Approved for this
-            program will not appear when you
-            generate again.
-          </p>
-
-          <p className="mt-2 text-xl text-gray-400">
-            The number entered determines how
-            many new households will be
-            generated.
-          </p>
-
         </div>
       )}
 
@@ -1862,7 +1848,7 @@ const handleAddAll = () => {
             >
               {saving
                 ? 'Saving...'
-                : `Save All to Beneficiaries (${generated.selected.length})`}
+                : `Save (${generated.selected.length})`}
             </button>
 
           </div>
@@ -1874,7 +1860,7 @@ const handleAddAll = () => {
       {loading ? (
         <Spinner />
       ) : (
-        <Band title="Suggested Programs — Households You Encoded">
+        <Band title="Suggested Programs Per Household">
 
           <div className="rounded-lg border border-gray-300 overflow-hidden">
 
