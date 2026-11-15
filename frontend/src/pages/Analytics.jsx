@@ -384,10 +384,10 @@ useEffect(() => {
 
 
   /* =======================================================
-     HIGHLY VULNERABLE
+     high VULNERABLE
   ======================================================= */
 
-  const highlyVulnerable = useMemo(() => {
+  const highVulnerable = useMemo(() => {
     const record = byVulnerability.find(
       (item) => {
         const value = String(
@@ -397,7 +397,7 @@ useEffect(() => {
           .toLowerCase();
 
         return (
-          value === 'highly vulnerable' ||
+          value === 'high vulnerable' ||
           value === 'high'
         );
       }
@@ -508,8 +508,8 @@ const maxDist =
     ],
     [
       'HIGH PRIORITY',
-      highlyVulnerable,
-      'Highly vulnerable households',
+      highVulnerable,
+      'High vulnerable households',
       'text-amber-soft',
     ],
     [
