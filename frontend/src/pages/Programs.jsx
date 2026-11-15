@@ -245,7 +245,7 @@ export default function Programs() {
       <div className="relative">
         <PageHeader
           title="Assistance Program"
-          subtitle="Assistance programs and review data-driven program suggestions."
+          subtitle="Assistance programs for the community."
         />
 
         <div className="absolute right-0 top-0">
