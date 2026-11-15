@@ -369,7 +369,7 @@ const closeCalamityDecision = () => {
 
       <PageHeader
         title="Approve Household Data"
-        subtitle="Review ML-validated households and calamity assistance requests before making the final Captain decision."
+        subtitle="Review validated households and calamity assistance requests."
       />
 
 
