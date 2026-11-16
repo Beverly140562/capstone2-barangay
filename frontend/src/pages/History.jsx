@@ -721,7 +721,7 @@ const rejectedCount = combinedHistory.filter(
           onClick={() => setSelectedHousehold(null)}
         >
           <div
-            className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
+            className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-2xl scrollbar-hide"
             onClick={(e) => e.stopPropagation()}
           >
 
@@ -793,153 +793,141 @@ const rejectedCount = combinedHistory.filter(
 
             </div>
 
-            {/* PROGRAM HISTORY */}
-            <div className="px-6 pb-6">
+            
+{/* PROGRAM HISTORY */}
+<div className="px-6 pb-6">
+  <h3 className="mb-3 text-2xl font-bold text-[#6E2430]">
+    Assistance Program History
+  </h3>
 
-              <h3 className="mb-3 text-2xl font-bold text-[#6E2430]">
-                Assistance Program History
-              </h3>
+  <div className="space-y-3">
+    {selectedHousehold.programs.map((program) => (
+      <div
+        key={program.validation_id}
+        className="rounded-xl border border-gray-200 p-4"
+      >
+        <div className="flex flex-col text-xl gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="font-bold text-gray-800">
+              {program.program_name || '—'}
+            </p>
 
-              <div className="space-y-3">
+            <p className="mt-1 text-xl text-gray-500">
+              Decision by:{' '}
+              <span className="font-medium text-gray-700">
+                {getDecisionMaker(program)}
+              </span>
+            </p>
 
-                {selectedHousehold.programs.map((program) => (
-                  <div
-                    key={program.validation_id}
-                    className="rounded-xl border border-gray-200 p-4"
-                  >
+            <p className="text-xl text-gray-500">
+              Date:{' '}
+              {formatDate(getDecisionDate(program))}
+            </p>
+          </div>
 
-                    <div className="flex flex-col text-xl gap-3 md:flex-row md:items-start md:justify-between">
+          <span
+            className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xl font-semibold ${getStatusStyle(
+              program.validation_status
+            )}`}
+          >
+            {getStatusIcon(program.validation_status)}
+            {program.validation_status || '—'}
+          </span>
+        </div>
 
-                      <div>
+        {/* PROGRAM DESCRIPTION */}
+        {program.description && (
+          <div className="mt-3 rounded-lg bg-gray-50 p-3">
+            <p className="text-xl font-semibold uppercase text-gray-500">
+              Program Description
+            </p>
 
-                        <p className="font-bold text-gray-800">
-                          {program.program_name || '—'}
-                        </p>
+            <p className="mt-1 text-xl text-gray-700">
+              {program.description}
+            </p>
+          </div>
+        )}
 
-                        <p className="mt-1 text-xl text-gray-500">
-                          Decision by:{' '}
-                          <span className="font-medium text-gray-700">
-                            {getDecisionMaker(program)}
-                          </span>
-                        </p>
+        {/* REMARKS */}
+        <div className="mt-3 rounded-lg bg-gray-50 p-3">
+          <p className="text-xl font-semibold uppercase text-gray-500">
+            Remarks
+          </p>
 
-                        <p className="text-xl text-gray-500">
-                          Date:{' '}
-                          {formatDate(
-                            getDecisionDate(program)
-                          )}
-                        </p>
+          <p className="mt-1 text-xl text-gray-700">
+            {program.remarks || 'No remarks'}
+          </p>
+        </div>
 
-                      </div>
+        {/* CALAMITY DAMAGE DETAILS */}
+        {program.record_type === 'Calamity' && (
+          <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 p-4">
+            <p className="mb-3 text-xl font-bold text-orange-800">
+              Calamity Damage Information
+            </p>
 
-                      <span
-                        className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xl font-semibold ${getStatusStyle(
-                          program.validation_status
-                        )}`}
-                      >
-                        {getStatusIcon(
-                          program.validation_status
-                        )}
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div>
+                <p className="text-lg font-semibold text-gray-500">
+                  Risk Level
+                </p>
+                <p className="text-xl text-gray-800">
+                  {program.risk_level || '—'}
+                </p>
+              </div>
 
-                        {program.validation_status || '—'}
-                      </span>
+              <div>
+                <p className="text-lg font-semibold text-gray-500">
+                  House Type
+                </p>
+                <p className="text-xl text-gray-800">
+                  {program.house_type || '—'}
+                </p>
+              </div>
 
-                    </div>
+              <div>
+                <p className="text-lg font-semibold text-gray-500">
+                  Roof Damage
+                </p>
+                <p className="text-xl text-gray-800">
+                  {program.roof_damage || '—'}
+                </p>
+              </div>
 
-                    {/* PROGRAM DESCRIPTION */}
-                    {program.description && (
-                      <div className="mt-3 rounded-lg bg-gray-50 p-3">
-                        <p className="text-xl font-semibold uppercase text-gray-500">
-                          Program Description
-                        </p>
+              <div>
+                <p className="text-lg font-semibold text-gray-500">
+                  Wall Damage
+                </p>
+                <p className="text-xl text-gray-800">
+                  {program.wall_damage || '—'}
+                </p>
+              </div>
 
-                        <p className="mt-1 text-xl text-gray-700">
-                          {program.description}
-                        </p>
-                      </div>
-                    )}
+              <div>
+                <p className="text-lg font-semibold text-gray-500">
+                  Flooding Level
+                </p>
+                <p className="text-xl text-gray-800">
+                  {program.flooding_level || '—'}
+                </p>
+              </div>
 
-                    {/* REMARKS */}
-                    <div className="mt-3 rounded-lg bg-gray-50 p-3">
-                      <p className="text-xl font-semibold uppercase text-gray-500">
-                        Remarks
-                      </p>
-
-                      <p className="mt-1 text-xl text-gray-700">
-                        {program.remarks || 'No remarks'}
-                      </p>
-                    </div>
-
-                  </div>
-                ))}
-
-                {/* CALAMITY DAMAGE DETAILS */}
-{program.record_type === 'Calamity' && (
-  <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 p-4">
-    <p className="mb-3 text-xl font-bold text-orange-800">
-      Calamity Damage Information
-    </p>
-
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-      <div>
-        <p className="text-lg font-semibold text-gray-500">
-          Risk Level
-        </p>
-        <p className="text-xl text-gray-800">
-          {program.risk_level || '—'}
-        </p>
-      </div>
-
-      <div>
-        <p className="text-lg font-semibold text-gray-500">
-          House Type
-        </p>
-        <p className="text-xl text-gray-800">
-          {program.house_type || '—'}
-        </p>
-      </div>
-
-      <div>
-        <p className="text-lg font-semibold text-gray-500">
-          Roof Damage
-        </p>
-        <p className="text-xl text-gray-800">
-          {program.roof_damage || '—'}
-        </p>
-      </div>
-
-      <div>
-        <p className="text-lg font-semibold text-gray-500">
-          Wall Damage
-        </p>
-        <p className="text-xl text-gray-800">
-          {program.wall_damage || '—'}
-        </p>
-      </div>
-
-      <div>
-        <p className="text-lg font-semibold text-gray-500">
-          Flooding Level
-        </p>
-        <p className="text-xl text-gray-800">
-          {program.flooding_level || '—'}
-        </p>
-      </div>
-
-      <div>
-        <p className="text-lg font-semibold text-gray-500">
-          Damage Risk Score
-        </p>
-        <p className="text-xl text-gray-800">
-          {program.damage_risk ?? '—'}
-        </p>
-      </div>
-    </div>
-  </div>
-)}
-
+              <div>
+                <p className="text-lg font-semibold text-gray-500">
+                  Damage Risk Score
+                </p>
+                <p className="text-xl text-gray-800">
+                  {program.damage_risk ?? '—'}
+                </p>
               </div>
             </div>
+          </div>
+        )}
+      </div>
+    ))}
+  </div>
+</div>
+
 
           </div>
         </div>
