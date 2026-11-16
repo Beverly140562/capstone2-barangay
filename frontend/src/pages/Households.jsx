@@ -379,10 +379,10 @@ export default function Households() {
       {/* Header */}
       <div className="mt-4">
         <PageHeader
-          title={editMode ? 'Update Records' : 'Household'}
+          title={editMode ? 'Records' : 'Household'}
           subtitle={
             editMode
-              ? 'Update existing household and residence information.'
+              ? 'Household and residence information.'
               : 'Household and residence information.'
           }
         >

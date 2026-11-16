@@ -36,7 +36,7 @@ const NAV = {
     {
       section: 'Household and Beneficiaries',
       items: [
-        { to: '/households', label: 'Household', img: <NotebookPen className="w-10 h-10 inline-block text-white p-1.5 mr-2  " strokeWidth={3} /> },
+        { to: '/encode', label: 'Household', img: <NotebookPen className="w-10 h-10 inline-block text-white p-1.5 mr-2  " strokeWidth={3} /> },
         { to: '/update', label: 'Update Records',img: <Archive className="w-10 h-10 inline-block text-white p-1.5 mr-2  " strokeWidth={3} /> },
         { to: '/suggestions', label: 'Assistance Program', img: <HeartHandshake className="w-10 h-10 inline-block text-white p-1.5 mr-2  " strokeWidth={3} /> }
       ]

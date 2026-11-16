@@ -1090,7 +1090,7 @@ if (predictionUpdated) {
   );
 }
 
-navigate('/households');
+navigate('/update');
 
 
     } catch (err) {
@@ -2146,34 +2146,20 @@ navigate('/households');
             BUTTONS
         ==================================================== */}
 
-        <div className="flex gap-2 justify-end mt-6">
+        <div className="flex justify-end mt-6">
 
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() =>
-              navigate('/households')
-            }
-            disabled={busy}
-          >
-            Cancel
-          </Button>
+  <Button
+    type="submit"
+    disabled={busy}
+  >
+    {busy
+      ? 'Saving…'
+      : editId
+        ? 'Save Changes'
+        : 'Save'}
+  </Button>
 
-
-          <Button
-            type="submit"
-            disabled={busy}
-          >
-
-            {busy
-              ? 'Saving…'
-              : editId
-                ? 'Save Changes'
-                : 'Save'}
-
-          </Button>
-
-        </div>
+</div>
 
       </div>
 
