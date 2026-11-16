@@ -396,10 +396,7 @@ const QUERIES = {
     d.household_id,
     d.program_id,
     d.created_at,
-    d.amount_released,
     d.status,
-    d.release_status,
-    d.release_date,
     d.period_start,
     d.period_end,
 

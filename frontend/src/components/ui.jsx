@@ -49,7 +49,7 @@ const TONES = {
 
 export function Badge({ children, tone = 'gray' }) {
   return (
-    <span className={`inline-block rounded-full px-2.5 py-0.5 text-lg font-semibold ${TONES[tone]}`}>
+    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xl font-semibold ${TONES[tone]}`}>
       {children}
     </span>
   );
@@ -84,11 +84,11 @@ export function statusTone(status = '') {
 
 export function Input({ label, ...props }) {
   return (
-    <label className="block text-sm">
+    <label className="block text-xl">
       <span className="text-gray-700 font-semibold mb-1 block text-xl">{label}</span>
       <input
         {...props}
-        className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 text-xl focus:outline-none focus:ring-2 focus:ring-brand"
+        className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 text-2xl focus:outline-none focus:ring-2 focus:ring-brand"
       />
     </label>
   );
@@ -96,11 +96,11 @@ export function Input({ label, ...props }) {
 
 export function Select({ label, children, ...props }) {
   return (
-    <label className="block text-lg">
+    <label className="block text-xl">
       <span className="text-gray-700  text-xl font-semibold mb-1 block">{label}</span>
       <select
         {...props}
-        className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 text-xl focus:outline-none focus:ring-2 focus:ring-brand"
+        className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 text-2xl focus:outline-none focus:ring-2 focus:ring-brand"
       >
         {children}
       </select>
@@ -112,14 +112,14 @@ export function Button({ children, variant = 'primary', ...props }) {
   const variants = {
     primary: 'bg-[#6E2430] hover:bg-[#963041] text-white',
     success: 'bg-success hover:bg-green-700 text-white',
-    danger: 'bg-muted hover:bg-gray-700 text-white',
+    danger: 'hover:bg-gray-300 text-white',
     outline: 'border border-gray-300 text-gray-700 hover:bg-gray-50',
     maroon: 'bg-[#6E2430] text-white'
   };
   return (
     <button
       {...props}
-      className={`rounded-md px-6 py-2 text-2xl font-medium transition ${variants[variant]} disabled:opacity-50`}
+      className={`rounded-md px-2 py-2 text-2xl font-medium transition ${variants[variant]} disabled:opacity-50`}
     >
       {children}
     </button>

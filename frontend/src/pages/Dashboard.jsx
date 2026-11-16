@@ -1119,13 +1119,13 @@ if (role === 'admin') {
 
         {/* RECENT RECORDS */}
 
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm ">
 
           <div className="bg-[#6E2430] px-6 py-5 text-xl font-bold text-white">
             Recently Encoded Households
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scrollbar-hide">
 
             <Table
               head={[

@@ -2,12 +2,121 @@ import { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { api } from '../lib/api';
-import {
-  PageHeader,
-  Input,
-  Select,
-  Button,
-} from '../components/ui';
+import { PageHeader, Input, Select } from '../components/ui';
+
+const PUROKS = [
+  '1', '1-A', '2', '2-A', '3', '3-A', '4', '5', '5-A', '5-B', '5-C',
+  '6', '6-A', '7', '7-A', '8', '8-A', '9', '9-A',
+];
+
+/* ==========================================================================
+   PRESENTATION HELPERS
+========================================================================== */
+
+function initialsOf(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  const letters = parts.slice(0, 2).map((p) => p[0]).join('').toUpperCase();
+  return letters || '?';
+}
+
+function Avatar({ name, large = false }) {
+  return (
+    <span
+      className={`flex shrink-0 items-center justify-center rounded-full bg-[#F8E9EB] font-bold text-[#6E2430] ${
+        large ? 'h-14 w-14 text-xl' : 'h-10 w-10 text-base'
+      }`}
+    >
+      {initialsOf(name)}
+    </span>
+  );
+}
+
+function Card({ title, subtitle, children }) {
+  return (
+    <section className="rounded-2xl border border-[#EBD3D3] bg-white p-6 shadow-sm">
+      <div className="mb-5">
+        <h3 className="text-2xl font-bold text-[#6E2430]">{title}</h3>
+        {subtitle && <p className="mt-1 text-base text-gray-500">{subtitle}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Stepper({ step }) {
+  const steps = ['Choose household', 'Assessment & program'];
+
+  return (
+    <ol className="flex flex-wrap items-center gap-3">
+      {steps.map((label, index) => {
+        const number = index + 1;
+        const done = step > number;
+        const active = step === number;
+
+        return (
+          <li key={label} className="flex items-center gap-3">
+            <span
+              className={`flex h-9 w-9 items-center justify-center rounded-full text-base font-bold ${
+                done || active
+                  ? 'bg-[#6E2430] text-white'
+                  : 'bg-gray-200 text-gray-500'
+              }`}
+            >
+              {done ? '✓' : number}
+            </span>
+            <span
+              className={`text-xl font-semibold ${
+                active || done ? 'text-gray-900' : 'text-gray-400'
+              }`}
+            >
+              {label}
+            </span>
+            {index < steps.length - 1 && (
+              <span className="mx-1 hidden h-px w-10 bg-gray-300 sm:block" />
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+// Button group used instead of a dropdown for short option lists.
+function OptionGroup({ label, value, options, onChange, disabled }) {
+  return (
+    <div>
+      <p className="mb-2 text-xl font-semibold text-gray-800">{label}</p>
+
+      <div
+        role="radiogroup"
+        aria-label={label}
+        className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+      >
+        {options.map((option) => {
+          const active = value === option;
+
+          return (
+            <button
+              key={option}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              disabled={disabled}
+              onClick={() => onChange(option)}
+              className={`rounded-xl border px-3 py-2.5 text-lg font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6E2430] disabled:opacity-50 ${
+                active
+                  ? 'border-[#6E2430] bg-[#6E2430] text-white shadow-sm'
+                  : 'border-gray-300 bg-white text-gray-700 hover:border-[#6E2430]/50 hover:bg-[#FBF6F6]'
+              }`}
+            >
+              {option}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export default function CalamityProgram() {
   const navigate = useNavigate();
@@ -27,12 +136,9 @@ export default function CalamityProgram() {
   const [programs, setPrograms] = useState([]);
   const [loadingPrograms, setLoadingPrograms] = useState(true);
 
-  const [selectedHousehold, setSelectedHousehold] =
-    useState(passedHousehold);
+  const [selectedHousehold, setSelectedHousehold] = useState(passedHousehold);
 
-  const [purok, setPurok] = useState(
-    passedHousehold?.purok || ''
-  );
+  const [purok, setPurok] = useState(passedHousehold?.purok || '');
 
   const [householdSearch, setHouseholdSearch] = useState(
     passedHousehold?.household_head_name || ''
@@ -94,9 +200,7 @@ export default function CalamityProgram() {
       try {
         setLoadingPrograms(true);
 
-        const res = await api.get(
-          '/programs?type=Calamity'
-        );
+        const res = await api.get('/programs?type=Calamity');
 
         const loadedPrograms = Array.isArray(res?.programs)
           ? res.programs
@@ -106,14 +210,9 @@ export default function CalamityProgram() {
 
         setPrograms(loadedPrograms);
       } catch (err) {
-        console.error(
-          'Failed to load assistance programs:',
-          err
-        );
+        console.error('Failed to load assistance programs:', err);
 
-        setError(
-          'Failed to load assistance programs.'
-        );
+        setError('Failed to load assistance programs.');
       } finally {
         setLoadingPrograms(false);
       }
@@ -126,17 +225,12 @@ export default function CalamityProgram() {
   // FILTER HOUSEHOLDS
   // --------------------------------------------------
   const filteredHouseholds = useMemo(() => {
-    const search = householdSearch
-      .trim()
-      .toLowerCase();
+    const search = householdSearch.trim().toLowerCase();
 
     return households
       .filter((household) => {
         // Purok filter
-        if (
-          purok &&
-          String(household.purok || '') !== String(purok)
-        ) {
+        if (purok && String(household.purok || '') !== String(purok)) {
           return false;
         }
 
@@ -152,9 +246,7 @@ export default function CalamityProgram() {
         return householdName.includes(search);
       })
       .sort((a, b) =>
-        String(
-          a.household_head_name || ''
-        ).localeCompare(
+        String(a.household_head_name || '').localeCompare(
           String(b.household_head_name || '')
         )
       );
@@ -166,23 +258,15 @@ export default function CalamityProgram() {
   const handleSelectHousehold = (household) => {
     setSelectedHousehold(household);
 
-    setPurok(
-      household.purok
-        ? String(household.purok)
-        : ''
-    );
+    setPurok(household.purok ? String(household.purok) : '');
 
-    setHouseholdSearch(
-      household.household_head_name || ''
-    );
+    setHouseholdSearch(household.household_head_name || '');
 
     // Reset program and damage assessment
     // when selecting another household.
     setProgram('');
 
-    setHouseType(
-      household.house_type || 'Light Materials'
-    );
+    setHouseType(household.house_type || 'Light Materials');
 
     setRoofDamage('None');
     setWallDamage('None');
@@ -257,23 +341,17 @@ export default function CalamityProgram() {
     setError('');
 
     if (!selectedHousehold) {
-      setError(
-        'Please select a household first.'
-      );
+      setError('Please select a household first.');
       return;
     }
 
     if (!program) {
-      setError(
-        'Please select a calamity assistance program.'
-      );
+      setError('Please select a calamity assistance program.');
       return;
     }
 
     if (!selectedHousehold.household_id) {
-      setError(
-        'The selected household does not have a valid household ID.'
-      );
+      setError('The selected household does not have a valid household ID.');
       return;
     }
 
@@ -281,33 +359,19 @@ export default function CalamityProgram() {
 
     try {
       const data = {
-        household_id:
-          selectedHousehold.household_id,
-
+        household_id: selectedHousehold.household_id,
         program_id: program,
-
         house_type: houseType,
-
         roof_damage: roofDamage,
-
         wall_damage: wallDamage,
-
         flooding_level: floodingLevel,
-
         damage_risk: damageRisk,
-
         risk_level: getRiskLabel(),
       };
 
-      console.log(
-        'Saving calamity program:',
-        data
-      );
+      console.log('Saving calamity program:', data);
 
-      await api.post(
-        '/programs/calamity-programs',
-        data
-      );
+      await api.post('/programs/calamity-programs', data);
 
       navigate('/suggestions', {
         state: {
@@ -316,10 +380,7 @@ export default function CalamityProgram() {
         },
       });
     } catch (err) {
-      console.error(
-        'Failed to save calamity program:',
-        err
-      );
+      console.error('Failed to save calamity program:', err);
 
       setError(
         err?.response?.data?.message ||
@@ -333,11 +394,24 @@ export default function CalamityProgram() {
   };
 
   // --------------------------------------------------
+  // RISK STYLING
+  // --------------------------------------------------
+  const riskStyle =
+    damageRisk >= 70
+      ? { bar: 'bg-red-500', pill: 'bg-red-50 text-red-700 ring-red-200' }
+      : damageRisk >= 40
+      ? { bar: 'bg-amber-500', pill: 'bg-amber-50 text-amber-700 ring-amber-200' }
+      : { bar: 'bg-green-500', pill: 'bg-green-50 text-green-700 ring-green-200' };
+
+  const selectedProgramName =
+    programs.find((item) => String(item.program_id) === String(program))
+      ?.program_name || '';
+
+  // --------------------------------------------------
   // RENDER
   // --------------------------------------------------
   return (
     <div className="space-y-6">
-
       {/* HEADER */}
       <div className="mt-5">
         <PageHeader
@@ -346,309 +420,185 @@ export default function CalamityProgram() {
         />
       </div>
 
-      {/* FORM CARD */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+      <Stepper step={selectedHousehold ? 2 : 1} />
 
-        {/* CARD HEADER */}
-        <div className="px-5 py-3 bg-[#6E2430] text-white text-xl font-semibold">
-          Add Household to Calamity Program
+      {/* ERROR */}
+      {error && (
+        <div
+          role="alert"
+          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-lg font-semibold text-red-800"
+        >
+          {error}
         </div>
+      )}
 
-        <div className="p-6">
+      {/* --------------------------------------------------
+          STEP 1: FIND HOUSEHOLD
+      -------------------------------------------------- */}
+      {!selectedHousehold && (
+        <Card
+          title="Select Household"
+        >
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Select
+              label="Select Purok"
+              value={purok}
+              onChange={(e) => setPurok(e.target.value)}
+              className="w-full"
+            >
+              <option value="">-- All Puroks --</option>
+              {PUROKS.map((p) => (
+                <option key={p} value={p}>
+                  Purok {p}
+                </option>
+              ))}
+            </Select>
 
-          {/* ERROR */}
-          {error && (
-            <div className="mb-5 rounded-md bg-red-100 border border-red-300 text-red-800 px-4 py-3 font-semibold">
-              {error}
+            <Input
+              label="Household Name"
+              value={householdSearch}
+              onChange={(e) => setHouseholdSearch(e.target.value)}
+              placeholder="Type household name..."
+              className="w-full"
+            />
+          </div>
+
+          <div className="mb-3 mt-6 flex items-center justify-between">
+            <h4 className="text-xl font-bold text-gray-900">
+              Available Households
+            </h4>
+
+            {!loadingHouseholds && (
+              <span className="rounded-full bg-[#F8E9EB] px-3 py-1 text-xl font-bold text-[#6E2430]">
+                {filteredHouseholds.length} household
+                {filteredHouseholds.length !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+
+          {loadingHouseholds ? (
+            <div className="py-10 text-center text-lg font-semibold text-gray-500">
+              Loading households...
+            </div>
+          ) : filteredHouseholds.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-gray-300 py-10 text-center">
+              <p className="text-lg font-semibold text-gray-500">
+                No households found.
+              </p>
+              <p className="mt-1 text-base text-gray-400">
+                Try another Purok or household name.
+              </p>
+            </div>
+          ) : (
+            <div className="max-h-[440px] overflow-y-auto rounded-xl border border-[#EBD3D3] scrollbar-hide">
+              <table className="w-full text-left">
+                <thead className="sticky top-0 z-10 bg-[#FFD7D7] text-lg">
+                  <tr>
+                    <th className="px-4 py-3 font-bold text-2xl text-[#6E2430]">
+                      Household
+                    </th>
+                    <th className="px-4 py-3 font-bold text-2xl text-[#6E2430]">Purok</th>
+                    <th className="px-4 py-3 font-bold text-2xl text-[#6E2430]">
+                      Address
+                    </th>
+                    <th className="px-4 py-3 text-center font-bold text-2xl text-[#6E2430]">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {filteredHouseholds.map((item) => (
+                    <tr
+                      key={item.household_id}
+                      onClick={() => handleSelectHousehold(item)}
+                      className="cursor-pointer border-t border-gray-100 transition hover:bg-[#FBF6F6]"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <Avatar name={item.household_head_name} />
+                          <span className="text-2xl font-semibold text-gray-900">
+                            {item.household_head_name || 'Unnamed Household'}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3 text-2xl">
+                        <span className="rounded-lg bg-gray-100 px-2.5 py-1 font-medium text-gray-700">
+                          Purok {item.purok || '-'}
+                        </span>
+                      </td>
+
+                      <td className="px-4 py-3 text-2xl text-gray-600">
+                        {item.address || '-'}
+                      </td>
+
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleSelectHousehold(item);
+                          }}
+                          className="rounded-xl bg-gradient-to-r from-[#7A2837] to-[#5A1C28] px-4 py-2 text-lg font-semibold text-white shadow-sm transition hover:brightness-110"
+                        >
+                          Select
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
+        </Card>
+      )}
 
-          {/* --------------------------------------------------
-              FIND HOUSEHOLD
-          -------------------------------------------------- */}
-          {!selectedHousehold && (
-            <div className="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-5">
+      {/* --------------------------------------------------
+          STEP 2: ASSESSMENT
+      -------------------------------------------------- */}
+      {selectedHousehold && (
+        <div className="grid items-start gap-6 xl:grid-cols-[1fr_380px]">
+          {/* LEFT: FORM */}
+          <div className="space-y-6">
+            {/* Selected household */}
+            <section className="flex flex-wrap items-center gap-4 rounded-2xl border border-[#6E2430]/25 bg-gradient-to-r from-[#FBF6F6] to-white p-5 shadow-sm">
+              <Avatar name={selectedHousehold.household_head_name} large />
 
-              <h3 className="font-extrabold text-lg mb-4">
-                Select Household
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-                {/* PUROK */}
-                <div>
-                  <Select
-                    label="Select Purok"
-                    value={purok}
-                    onChange={(e) =>
-                      setPurok(e.target.value)
-                    }
-                    className="w-full"
-                  >
-                    <option value="">
-                      -- All Puroks --
-                    </option>
-
-                    <option value="1">
-                      Purok 1
-                    </option>
-
-                    <option value="2">
-                      Purok 2
-                    </option>
-
-                    <option value="3">
-                      Purok 3
-                    </option>
-
-                    <option value="4">
-                      Purok 4
-                    </option>
-
-                    <option value="5">
-                      Purok 5
-                    </option>
-
-                    <option value="6">
-                      Purok 6
-                    </option>
-
-                    <option value="7">
-                      Purok 7
-                    </option>
-                  </Select>
-                </div>
-
-                {/* HOUSEHOLD SEARCH */}
-                <div>
-                  <Input
-                    label="Household Name"
-                    value={householdSearch}
-                    onChange={(e) =>
-                      setHouseholdSearch(
-                        e.target.value
-                      )
-                    }
-                    placeholder="Type household name..."
-                    className="w-full"
-                  />
-                </div>
-
+              <div className="min-w-0 flex-1">
+                
+                <p className="truncate text-2xl font-extrabold text-[#6E2430]">
+                  {selectedHousehold.household_head_name || 'Unnamed Household'}
+                </p>
+                <p className="text-lg text-gray-600">
+                  {selectedHousehold.address || 'No address recorded'}
+                  {selectedHousehold.purok
+                    ? ` · Purok ${selectedHousehold.purok}`
+                    : ''}
+                </p>
               </div>
 
-              {/* MATCHING HOUSEHOLDS */}
-              <div className="mt-5">
+              <button
+                type="button"
+                onClick={handleChangeHousehold}
+                disabled={saving}
+                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-lg font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+              >
+                Change household
+              </button>
+            </section>
 
-                <div className="flex justify-between items-center mb-3">
-                  <h4 className="font-bold text-lg">
-                    Available Households
-                  </h4>
-
-                  {!loadingHouseholds && (
-                    <span className="text-gray-600 font-semibold">
-                      {filteredHouseholds.length}{' '}
-                      household
-                      {filteredHouseholds.length !== 1
-                        ? 's'
-                        : ''}
-                    </span>
-                  )}
-                </div>
-
-                {loadingHouseholds ? (
-                  <div className="py-8 text-center text-gray-500 font-semibold">
-                    Loading households...
-                  </div>
-                ) : filteredHouseholds.length === 0 ? (
-                  <div className="py-8 text-center border border-dashed border-gray-300 rounded-lg text-gray-500 font-semibold">
-                    No households found.
-
-                    <div className="text-sm mt-1 font-normal">
-                      Try another Purok or household name.
-                    </div>
-                  </div>
-                ) : (
-                  <div className="max-h-[400px] overflow-y-auto border border-gray-200 rounded-lg">
-
-                    <table className="w-full text-left">
-
-                      <thead className="sticky top-0 z-10 bg-[#FFD7D7]">
-                        <tr>
-                          <th className="px-4 py-3 font-extrabold">
-                            Household
-                          </th>
-
-                          <th className="px-4 py-3 font-extrabold">
-                            Purok
-                          </th>
-
-                          <th className="px-4 py-3 font-extrabold">
-                            Address
-                          </th>
-
-                          <th className="px-4 py-3 text-center font-extrabold">
-                            Action
-                          </th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-
-                        {filteredHouseholds.map(
-                          (item) => (
-                            <tr
-                              key={
-                                item.household_id
-                              }
-                              className="border-t border-gray-200 hover:bg-gray-50"
-                            >
-
-                              <td className="px-4 py-3 font-semibold">
-                                {item.household_head_name ||
-                                  'Unnamed Household'}
-                              </td>
-
-                              <td className="px-4 py-3">
-                                Purok{' '}
-                                {item.purok || '-'}
-                              </td>
-
-                              <td className="px-4 py-3">
-                                {item.address ||
-                                  '-'}
-                              </td>
-
-                              <td className="px-4 py-3 text-center">
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleSelectHousehold(
-                                      item
-                                    )
-                                  }
-                                  className="px-4 py-2 rounded-md bg-[#6E2430] text-white font-bold hover:opacity-90 transition"
-                                >
-                                  Select
-                                </button>
-
-                              </td>
-
-                            </tr>
-                          )
-                        )}
-
-                      </tbody>
-
-                    </table>
-
-                  </div>
-                )}
-
-              </div>
-
-            </div>
-          )}
-
-          {/* --------------------------------------------------
-              SELECTED HOUSEHOLD
-          -------------------------------------------------- */}
-          {selectedHousehold && (
-            <div className="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-
-              <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-3">
-
-                <h3 className="font-extrabold text-lg">
-                  Selected Household
-                </h3>
-
-                <button
-                  type="button"
-                  onClick={handleChangeHousehold}
-                  disabled={saving}
-                  className="px-4 py-2 rounded-md bg-gray-300 text-gray-800 font-bold hover:bg-gray-400 transition disabled:opacity-50"
-                >
-                  Change Household
-                </button>
-
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-                {/* HOUSEHOLD NAME */}
-                <div>
-                  <label className="block font-bold mb-1">
-                    Household Name
-                  </label>
-
-                  <Input
-                    value={
-                      selectedHousehold.household_head_name ||
-                      ''
-                    }
-                    readOnly
-                    className="w-full"
-                  />
-                </div>
-
-                {/* PUROK */}
-                <div>
-                  <label className="block font-bold mb-1">
-                    Purok
-                  </label>
-
-                  <Input
-                    value={
-                      selectedHousehold.purok
-                        ? `Purok ${selectedHousehold.purok}`
-                        : ''
-                    }
-                    readOnly
-                    className="w-full"
-                  />
-                </div>
-
-                {/* ADDRESS */}
-                <div className="md:col-span-2">
-                  <label className="block font-bold mb-1">
-                    Address
-                  </label>
-
-                  <Input
-                    value={
-                      selectedHousehold.address ||
-                      ''
-                    }
-                    readOnly
-                    className="w-full"
-                  />
-                </div>
-
-              </div>
-
-            </div>
-          )}
-
-          {/* --------------------------------------------------
-              ASSISTANCE PROGRAM
-          -------------------------------------------------- */}
-          {selectedHousehold && (
-            <div className="mb-6">
-
-              <h3 className="font-extrabold text-lg mb-4">
-                Calamity Assistance Program
-              </h3>
-
+            {/* Program */}
+            <Card
+              title="Calamity Assistance Program"
+            >
               <Select
                 label="Select program"
                 value={program}
-                onChange={(e) =>
-                  setProgram(e.target.value)
-                }
+                onChange={(e) => setProgram(e.target.value)}
                 className="w-full"
                 disabled={loadingPrograms}
               >
-
                 <option value="">
                   {loadingPrograms
                     ? 'Loading programs...'
@@ -657,292 +607,148 @@ export default function CalamityProgram() {
 
                 {!loadingPrograms &&
                   programs.map((item) => (
-                    <option
-                      key={item.program_id}
-                      value={item.program_id}
-                    >
+                    <option key={item.program_id} value={item.program_id}>
                       {item.program_name}
                     </option>
                   ))}
-
               </Select>
+            </Card>
 
-            </div>
-          )}
+            {/* Damage assessment */}
+            <Card
+              title="Damage Assessment"
+            >
+              <div className="space-y-6">
+                <OptionGroup
+                  label="House type"
+                  value={houseType}
+                  options={['Light Materials', 'Mixed Materials', 'Concrete']}
+                  onChange={setHouseType}
+                  disabled={saving}
+                />
 
-          {/* --------------------------------------------------
-              HOUSE TYPE
-          -------------------------------------------------- */}
-          {selectedHousehold && (
-            <div className="mb-6">
+                <OptionGroup
+                  label="Roof damage"
+                  value={roofDamage}
+                  options={['None', 'Minor', 'Moderate', 'Severe']}
+                  onChange={setRoofDamage}
+                  disabled={saving}
+                />
 
-              <label className="block font-bold mb-1">
-                House Type
-              </label>
+                <OptionGroup
+                  label="Wall damage"
+                  value={wallDamage}
+                  options={['None', 'Minor', 'Moderate', 'Severe']}
+                  onChange={setWallDamage}
+                  disabled={saving}
+                />
 
-              <Select
-                value={houseType}
-                onChange={(e) =>
-                  setHouseType(
-                    e.target.value
-                  )
-                }
-                className="w-full"
-              >
-
-                <option value="Light Materials">
-                  Light Materials
-                </option>
-
-                <option value="Mixed Materials">
-                  Mixed Materials
-                </option>
-
-                <option value="Concrete">
-                  Concrete
-                </option>
-
-              </Select>
-
-            </div>
-          )}
-
-          {/* --------------------------------------------------
-              DAMAGE ASSESSMENT
-          -------------------------------------------------- */}
-          {selectedHousehold && (
-            <div className="mt-5">
-
-              <h3 className="font-extrabold text-lg mb-4">
-                Damage Assessment
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4">
-
-                {/* ROOF */}
-                <div>
-
-                  <label className="block font-bold mb-1">
-                    Roof Damage
-                  </label>
-
-                  <Select
-                    value={roofDamage}
-                    onChange={(e) =>
-                      setRoofDamage(
-                        e.target.value
-                      )
-                    }
-                    className="w-full"
-                  >
-
-                    <option value="None">
-                      None
-                    </option>
-
-                    <option value="Minor">
-                      Minor
-                    </option>
-
-                    <option value="Moderate">
-                      Moderate
-                    </option>
-
-                    <option value="Severe">
-                      Severe
-                    </option>
-
-                  </Select>
-
-                </div>
-
-                {/* WALL */}
-                <div>
-
-                  <label className="block font-bold mb-1">
-                    Wall Damage
-                  </label>
-
-                  <Select
-                    value={wallDamage}
-                    onChange={(e) =>
-                      setWallDamage(
-                        e.target.value
-                      )
-                    }
-                    className="w-full"
-                  >
-
-                    <option value="None">
-                      None
-                    </option>
-
-                    <option value="Minor">
-                      Minor
-                    </option>
-
-                    <option value="Moderate">
-                      Moderate
-                    </option>
-
-                    <option value="Severe">
-                      Severe
-                    </option>
-
-                  </Select>
-
-                </div>
-
-                {/* FLOODING */}
-                <div>
-
-                  <label className="block font-bold mb-1">
-                    Flooding Level
-                  </label>
-
-                  <Select
-                    value={floodingLevel}
-                    onChange={(e) =>
-                      setFloodingLevel(
-                        e.target.value
-                      )
-                    }
-                    className="w-full"
-                  >
-
-                    <option value="None">
-                      None
-                    </option>
-
-                    <option value="Low">
-                      Low
-                    </option>
-
-                    <option value="Moderate">
-                      Moderate
-                    </option>
-
-                    <option value="High">
-                      High
-                    </option>
-
-                  </Select>
-
-                </div>
-
+                <OptionGroup
+                  label="Flooding level"
+                  value={floodingLevel}
+                  options={['None', 'Low', 'Moderate', 'High']}
+                  onChange={setFloodingLevel}
+                  disabled={saving}
+                />
               </div>
+            </Card>
+          </div>
 
-            </div>
-          )}
+          {/* RIGHT: SUMMARY (sticky on wide screens) */}
+          <aside className="space-y-5 xl:sticky xl:top-4">
+            <section className="rounded-2xl border border-[#EBD3D3] bg-white p-6 shadow-md">
+              <p className="text-xl font-semibold text-gray-500">
+                Computed damage risk
+              </p>
 
-          {/* --------------------------------------------------
-              RISK
-          -------------------------------------------------- */}
-          {selectedHousehold && (
-            <div className="mt-7">
-
-              <div className="flex justify-between items-center mb-2">
-
-                <span className="font-bold text-lg">
-                  Computed Damage Risk
-                </span>
-
-                <span className="font-extrabold text-lg">
+              <div className="mt-1 flex items-end justify-between">
+                <span className="text-5xl font-extrabold text-[#6E2430]">
                   {damageRisk}%
                 </span>
 
-              </div>
-
-              <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
-
-                <div
-                  className="h-full bg-yellow-600 rounded-full transition-all duration-300"
-                  style={{
-                    width: `${damageRisk}%`,
-                  }}
-                />
-
-              </div>
-
-              <div className="mt-3">
-
                 <span
-                  className={`inline-block px-4 py-1 rounded-full font-medium ${
-                    damageRisk >= 70
-                      ? 'bg-red-200 text-red-800'
-                      : damageRisk >= 40
-                      ? 'bg-yellow-200 text-gray-800'
-                      : 'bg-green-200 text-green-800'
-                  }`}
+                  className={`rounded-full px-4 py-1 text-lg font-semibold ring-1 ${riskStyle.pill}`}
                 >
                   {getRiskLabel()}
                 </span>
-
               </div>
 
-            </div>
-          )}
-
-          {/* --------------------------------------------------
-              APPROVAL NOTICE
-          -------------------------------------------------- */}
-          {selectedHousehold && (
-            <div className="mt-7 rounded-lg border border-yellow-300 bg-yellow-50 p-4">
-
-              <div className="font-bold text-yellow-900">
-                Approval Required
+              <div className="mt-4 h-3 overflow-hidden rounded-full bg-gray-200">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${riskStyle.bar}`}
+                  style={{ width: `${damageRisk}%` }}
+                />
               </div>
 
-              <p className="text-sm text-yellow-800 mt-1">
-                After saving, this household will have
-                a <strong>Pending</strong> status. The
-                Barangay Captain must review and approve
-                the calamity assistance request before it
-                becomes an approved beneficiary.
-              </p>
+              <dl className="mt-5 space-y-2 border-t border-gray-100 pt-4 text-xl">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-gray-500">Program</dt>
+                  <dd className="text-right font-semibold text-gray-900">
+                    {selectedProgramName || '—'}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-gray-500">House type</dt>
+                  <dd className="font-semibold text-gray-900">{houseType}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-gray-500">Roof / Wall</dt>
+                  <dd className="font-semibold text-gray-900">
+                    {roofDamage} / {wallDamage}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-gray-500">Flooding</dt>
+                  <dd className="font-semibold text-gray-900">
+                    {floodingLevel}
+                  </dd>
+                </div>
+              </dl>
+            </section>
 
-            </div>
-          )}
+            
 
-          {/* --------------------------------------------------
-              BUTTONS
-          -------------------------------------------------- */}
-          <div className="flex justify-end gap-4 mt-8">
-
-            <button
-              type="button"
-              onClick={() =>
-                navigate('/suggestions')
-              }
-              disabled={saving}
-              className="px-6 py-2 rounded-md bg-gray-300 text-gray-800 font-bold hover:bg-gray-400 transition disabled:opacity-50"
-            >
-              Cancel
-            </button>
-
-            {selectedHousehold && (
+            <div className="flex flex-col gap-3">
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={
-                  saving ||
-                  !selectedHousehold ||
-                  !program
-                }
-                className="px-6 py-2 rounded-md bg-[#6E2430] text-white font-bold hover:opacity-90 transition disabled:opacity-50"
+                disabled={saving || !selectedHousehold || !program}
+                className="rounded-xl bg-gradient-to-r from-[#7A2837] to-[#5A1C28] px-6 py-3.5 text-xl font-bold text-white shadow-md shadow-[#6E2430]/25 transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6E2430]/30 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {saving
-                  ? 'Saving...'
-                  : 'Submit for Captain Approval'}
+                {saving ? 'Saving...' : 'Submit for Captain Approval'}
               </button>
-            )}
 
-          </div>
+              {!program && (
+                <p className="text-center text-sm text-gray-500">
+                  Choose a calamity assistance program to enable submit.
+                </p>
+              )}
 
+              <button
+                type="button"
+                onClick={() => navigate('/suggestions')}
+                disabled={saving}
+                className="rounded-xl border border-gray-300 bg-white px-6 py-3 text-lg font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </aside>
         </div>
+      )}
 
-      </div>
-
+      {/* Cancel while still choosing a household */}
+      {!selectedHousehold && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => navigate('/suggestions')}
+            className="rounded-xl border border-gray-300 bg-white px-6 py-3 text-2xl font-semibold text-gray-700 transition hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
     </div>
   );
 }
