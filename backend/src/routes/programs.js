@@ -7,7 +7,7 @@ const {
   requireRole,
   logActivity,
 } = require('../middleware/auth');
-
+const { notifyRole } = require('./notifications');
 
 
 
@@ -303,6 +303,12 @@ router.delete(
 // SAVE CALAMITY PROGRAM
 // POST /programs/calamity-programs
 // ==================================================
+
+ // ==================================================
+ // SAVE CALAMITY PROGRAM
+ // POST /programs/calamity-programs
+ // ==================================================
+
 router.post(
   '/calamity-programs',
   requireRole('admin', 'staff'),
@@ -319,129 +325,97 @@ router.post(
         risk_level,
       } = req.body || {};
 
-      // ------------------------------------------------
-      // VALIDATION
-      // ------------------------------------------------
-      if (!household_id) {
+      if (!household_id || !program_id) {
         return res.status(400).json({
-          message:
-            'household_id is required.',
+          error: 'household_id and program_id are required.',
         });
       }
 
-      if (!program_id) {
-        return res.status(400).json({
-          message:
-            'program_id is required.',
-        });
-      }
-
-      // ------------------------------------------------
-      // VERIFY HOUSEHOLD
-      // ------------------------------------------------
+      // Verify household.
       const householdRows = await query(
-  `
-  SELECT household_id, income_proof_images
-  FROM households
-  WHERE household_id = $1
-  `,
-  [household_id]
-);
-
-if (!householdRows[0]) {
-  return res.status(404).json({
-    error: 'Household not found.',
-  });
-}
-
-const images = householdRows[0].income_proof_images;
-
-const hasIncomeProof =
-  Array.isArray(images) &&
-  images.some(
-    (image) =>
-      typeof image === 'string' &&
-      image.trim().length > 0
-  );
-
-if (!hasIncomeProof) {
-  return res.status(400).json({
-    error:
-      'An income-proof image must be uploaded before this household can receive an assistance-program recommendation or be submitted for beneficiary validation.',
-  });
-}
-
-      // ------------------------------------------------
-      // VERIFY PROGRAM
-      // ------------------------------------------------
-      const programRows = await query(
         `
         SELECT
-          program_id,
-          program_name
+          household_id,
+          household_head_name,
+          income_proof_images
+        FROM households
+        WHERE household_id = $1::uuid
+        `,
+        [household_id]
+      );
+
+      if (!householdRows[0]) {
+        return res.status(404).json({
+          error: 'Household not found.',
+        });
+      }
+
+      const household = householdRows[0];
+
+      const hasIncomeProof =
+        Array.isArray(household.income_proof_images) &&
+        household.income_proof_images.some(
+          (image) =>
+            typeof image === 'string' &&
+            image.trim().length > 0
+        );
+
+      if (!hasIncomeProof) {
+        return res.status(400).json({
+          error:
+            'An income-proof image must be uploaded before this household can be submitted for assistance.',
+        });
+      }
+
+      // Verify assistance program.
+      const programRows = await query(
+        `
+        SELECT program_id, program_name
         FROM assistance_programs
-        WHERE program_id = $1
+        WHERE program_id = $1::uuid
         `,
         [program_id]
       );
 
       if (!programRows[0]) {
         return res.status(404).json({
-          message:
-            'Assistance program not found.',
+          error: 'Assistance program not found.',
         });
       }
 
-      // ------------------------------------------------
-      // CHECK EXISTING REQUEST
-      //
-      // Pending / Approved:
-      // Do not create another request.
-      //
-      // Rejected:
-      // Allow the household to submit again.
-      // ------------------------------------------------
+      const program = programRows[0];
+
+      // Check existing request.
       const existingRows = await query(
         `
-        SELECT
-          calamity_id,
-          status
+        SELECT calamity_id, status
         FROM calamity_programs
-        WHERE household_id = $1
-          AND program_id = $2
-        ORDER BY calamity_id DESC
+        WHERE household_id = $1::uuid
+          AND program_id = $2::uuid
+        ORDER BY created_at DESC
         LIMIT 1
         `,
-        [
-          household_id,
-          program_id,
-        ]
+        [household_id, program_id]
       );
 
       if (existingRows[0]) {
-        const existing =
-          existingRows[0];
+        const existing = existingRows[0];
 
         if (
-          existing.status === 'Pending' ||
-          existing.status === 'Approved'
+          ['Pending', 'Approved'].includes(existing.status)
         ) {
           return res.status(409).json({
-            message:
+            error:
               existing.status === 'Pending'
                 ? 'This household is already pending for this calamity assistance program.'
                 : 'This household is already approved for this calamity assistance program.',
-            status:
-              existing.status,
-            calamity_id:
-              existing.calamity_id,
+            status: existing.status,
+            calamity_id: existing.calamity_id,
           });
         }
       }
 
-      // ------------------------------------------------
-      // INSERT
-      // ------------------------------------------------
+      // Insert calamity request.
       const rows = await query(
         `
         INSERT INTO calamity_programs (
@@ -456,8 +430,8 @@ if (!hasIncomeProof) {
           status
         )
         VALUES (
-          $1,
-          $2,
+          $1::uuid,
+          $2::uuid,
           $3,
           $4,
           $5,
@@ -480,35 +454,66 @@ if (!hasIncomeProof) {
         ]
       );
 
+      const calamityProgram = rows[0];
+
+      console.log(
+        'CALAMITY REQUEST INSERTED:',
+        calamityProgram.calamity_id
+      );
+
+      // Notify Captain.
+      try {
+        await notifyRole({
+          role: 'captain',
+          title: 'New Calamity Assistance Approval',
+          message:
+            `A new calamity assistance request from ` +
+            `"${household.household_head_name || 'A household'}" ` +
+            `for "${program.program_name}" is waiting for your approval.`,
+          type: 'calamity_pending',
+          referenceId: calamityProgram.calamity_id,
+        });
+
+        console.log(
+          'CAPTAIN NOTIFIED FOR CALAMITY:',
+          calamityProgram.calamity_id
+        );
+      } catch (notificationError) {
+        console.error(
+          'CALAMITY NOTIFICATION FAILED:',
+          notificationError
+        );
+      }
+
       return res.status(201).json({
         success: true,
         message:
           'Calamity assistance request created successfully and is pending Captain approval.',
-        calamity_program:
-          rows[0],
+        calamity_program: calamityProgram,
       });
+
     } catch (error) {
       console.error(
         'Failed to save calamity program:',
         error
       );
 
-      // PostgreSQL duplicate/unique constraint
       if (error.code === '23505') {
         return res.status(409).json({
-          message:
+          error:
             'This household has already been submitted for this calamity assistance program.',
         });
       }
 
       return res.status(500).json({
-        message:
-          'Failed to save calamity program.',
-        error: error.message,
+        error: error.message || 'Failed to save calamity program.',
+        code: error.code || null,
+        detail: error.detail || null,
       });
     }
   }
 );
+
 
 router.patch('/:id/status', requireRole('admin', 'staff'), async (req, res) => {
   try {
