@@ -68,53 +68,30 @@ const loadUnreadCount = async () => {
   | GET NOTIFICATION DESTINATION
   |--------------------------------------------------------------------------
   */
-  const getNotificationDestination = (
-    notification
-  ) => {
-    const type =
-      notification?.notification_type;
+  const getNotificationDestination = (notification) => {
+  const type = notification?.notification_type;
 
-    switch (type) {
-      /*
-      |--------------------------------------------------------------------------
-      | BENEFICIARY
-      |--------------------------------------------------------------------------
-      */
+  switch (type) {
+    // REGULAR BENEFICIARY
+    case 'beneficiary_pending':
+      return '/approve';
 
-      case 'beneficiary_pending':
-        // Captain needs to approve the request
-        return '/approve';
+    case 'beneficiary_approved':
+    case 'beneficiary_rejected':
+      return '/history';
 
-      case 'beneficiary_approved':
-      case 'beneficiary_rejected':
-        // Staff/Admin can view approved beneficiaries
-        return '/history';
+    // CALAMITY ASSISTANCE
+    case 'calamity_pending':
+      return '/approve';
 
-      /*
-      |--------------------------------------------------------------------------
-      | CALAMITY
-      |--------------------------------------------------------------------------
-      */
+    case 'calamity_approved':
+    case 'calamity_rejected':
+      return '/history';
 
-      case 'calamity_pending':
-        // Captain needs to approve the calamity request
-        return '/approve';
-
-      case 'calamity_approved':
-      case 'calamity_rejected':
-        // Staff/Admin can view the resulting beneficiaries
-        return '/history';
-
-      /*
-      |--------------------------------------------------------------------------
-      | DEFAULT
-      |--------------------------------------------------------------------------
-      */
-
-      default:
-        return null;
-    }
-  };
+    default:
+      return null;
+  }
+};
 
   /*
   |--------------------------------------------------------------------------
@@ -248,6 +225,37 @@ const loadUnreadCount = async () => {
     }
   };
 
+  const getNotificationTitle = (notification) => {
+  const titles = {
+    calamity_pending: 'New Calamity Approval Request',
+    calamity_approved: 'Calamity Assistance Approved',
+    calamity_rejected: 'Calamity Assistance Rejected',
+    beneficiary_pending: 'New Beneficiary Approval Request',
+    beneficiary_approved: 'Beneficiary Approved',
+    beneficiary_rejected: 'Beneficiary Rejected',
+  };
+
+  return notification.title ||
+    titles[notification.notification_type] ||
+    'Notification';
+};
+
+const getNotificationMessage = (notification) => {
+  if (notification.message) return notification.message;
+
+  const messages = {
+    calamity_pending:
+      'A new calamity assistance request is waiting for your approval.',
+    calamity_approved:
+      'A calamity assistance request has been approved.',
+    calamity_rejected:
+      'A calamity assistance request has been rejected.',
+  };
+
+  return messages[notification.notification_type] ||
+    'You have a new notification.';
+};
+
   return (
     <div className="relative">
       {/* Bell */}
@@ -363,11 +371,11 @@ const loadUnreadCount = async () => {
                                 : 'font-bold text-[#6E2430]'
                             }`}
                           >
-                            {notification.title}
+                            {getNotificationTitle(notification)}
                           </p>
 
                           <p className="mt-1 text-lg leading-5 text-gray-600">
-                            {notification.message}
+                            {getNotificationMessage(notification)}
                           </p>
 
                           <p className="mt-2 text-lg text-gray-400">
