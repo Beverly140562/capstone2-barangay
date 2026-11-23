@@ -409,19 +409,14 @@ router.post(
 
       // Find the selected assistance program.
       const programRows = await query(
-        program_id
-          ? `
+        
+           `
               SELECT program_id, program_name
               FROM assistance_programs
               WHERE program_id = $1::uuid
             `
-          : `
-              SELECT program_id, program_name
-              FROM assistance_programs
-              WHERE LOWER(TRIM(program_name)) =
-                    LOWER(TRIM($1))
-            `,
-        [program_id || calamity_program]
+      
+        [program_id]
       );
 
       if (!programRows[0]) {
@@ -461,7 +456,7 @@ router.post(
         `,
         [
           household_id,
-          program.program_id,
+          program_id,
           house_type || null,
           roof_damage || null,
           wall_damage || null,
