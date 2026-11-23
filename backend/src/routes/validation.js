@@ -868,6 +868,7 @@ router.get(
 // ==================================================
 
 
+
 router.patch(
   '/calamity-programs/:id/decision',
   requireRole('captain'),
@@ -875,7 +876,6 @@ router.patch(
     try {
       const { decision, remarks } = req.body || {};
 
-      // Validate decision
       if (!['Approved', 'Rejected'].includes(decision)) {
         return res.status(400).json({
           error: 'Decision must be Approved or Rejected.',
@@ -890,7 +890,6 @@ router.patch(
         });
       }
 
-      // Get Captain ID
       const captainId = getAuthenticatedUserId(req);
 
       if (!captainId) {
@@ -899,7 +898,35 @@ router.patch(
         });
       }
 
-      // Update ONLY calamity_programs
+      // Get household and program information for notifications.
+      const details = await query(
+        `
+          SELECT
+            cp.calamity_id,
+            cp.household_id,
+            h.household_head_name,
+            cp.calamity_program,
+            p.program_name
+          FROM calamity_programs cp
+          LEFT JOIN households h
+            ON h.household_id = cp.household_id
+          LEFT JOIN assistance_programs p
+            ON p.program_id = cp.program_id
+          WHERE cp.calamity_id = $1::uuid
+            AND cp.status = 'Pending'
+        `,
+        [req.params.id]
+      );
+
+      if (!details[0]) {
+        return res.status(404).json({
+          error: 'Calamity request was not found or has already been processed.',
+        });
+      }
+
+      const calamity = details[0];
+
+      // Update ONLY calamity_programs.
       const updated = await query(
         `
           UPDATE calamity_programs
@@ -922,17 +949,57 @@ router.patch(
       );
 
       if (!updated[0]) {
-        return res.status(404).json({
-          error: 'Calamity request was not found or has already been processed.',
+        return res.status(409).json({
+          error: 'The calamity request has already been processed.',
         });
       }
+
+      const householdName =
+        calamity.household_head_name || 'A household';
+
+      const programName =
+        calamity.program_name ||
+        calamity.calamity_program ||
+        'Calamity Assistance';
+
+      // Prepare notification based on Captain's decision.
+      const notification = {
+        title:
+          decision === 'Approved'
+            ? 'Calamity Assistance Approved'
+            : 'Calamity Assistance Rejected',
+
+        message:
+          decision === 'Approved'
+            ? `The calamity assistance request for "${householdName}" has been approved by the Captain for "${programName}".`
+            : `The calamity assistance request for "${householdName}" has been rejected by the Captain for "${programName}". Reason: ${cleanRemarks}`,
+
+        type:
+          decision === 'Approved'
+            ? 'calamity_approved'
+            : 'calamity_rejected',
+
+        referenceId: calamity.calamity_id,
+      };
+
+      // Notify Staff.
+      await safeNotifyRole({
+        role: 'staff',
+        ...notification,
+      });
+
+      // Notify Admin.
+      await safeNotifyRole({
+        role: 'admin',
+        ...notification,
+      });
 
       return res.status(200).json({
         success: true,
         message:
           decision === 'Approved'
             ? 'Calamity assistance approved successfully.'
-            : 'Calamity assistance returned successfully.',
+            : 'Calamity assistance rejected successfully.',
         calamityProgram: updated[0],
       });
 
@@ -948,6 +1015,7 @@ router.patch(
     }
   }
 );
+
 
 
 module.exports = router;
