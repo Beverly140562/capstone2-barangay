@@ -112,7 +112,7 @@ export function Button({ children, variant = 'primary', ...props }) {
   const variants = {
     primary: 'bg-[#6E2430] hover:bg-[#963041] text-white',
     success: 'bg-success hover:bg-green-700 text-white',
-    danger: 'hover:bg-gray-300 text-white',
+    danger: 'bg-gray-300 hover:bg-gray-400 text-gray-700',
     outline: 'border border-gray-300 text-gray-700 hover:bg-gray-50',
     maroon: 'bg-[#6E2430] text-white'
   };
