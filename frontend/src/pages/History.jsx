@@ -24,8 +24,6 @@ function History() {
   const [expandedHousehold, setExpandedHousehold] = useState(null);
   const [selectedHousehold, setSelectedHousehold] = useState(null);
   const [error, setError] = useState('');
-  const [expandedCalamityHousehold, setExpandedCalamityHousehold] = useState(null);
-  const [selectedCalamityHousehold, setSelectedCalamityHousehold] = useState(null);
 
 
   useEffect(() => {
@@ -103,24 +101,64 @@ function History() {
 // ============================================================
 // COMBINE REGULAR AND CALAMITY BENEFICIARY RECORDS
 // ============================================================
+// ============================================================
+// COMBINE REGULAR AND CALAMITY BENEFICIARY RECORDS
+// PREVENT DUPLICATE CALAMITY RECORDS
+// ============================================================
 const combinedHistory = useMemo(() => {
-  const regularRecords = history.map((item) => ({
-    ...item,
-    record_type: 'Regular',
-    validation_id:
-      item.validation_id || `regular-${item.household_id}-${item.program_name}`,
-    validation_status: item.validation_status || item.status || 'Pending',
-  }));
+  // Identify records that belong to the calamity workflow.
+  const isCalamityRecord = (item) => {
+    const type = String(
+      item.record_type ||
+      item.assistance_type ||
+      item.program_type ||
+      ''
+    ).toLowerCase();
 
-  const calamityRecords = calamityHistory.map((item) => ({
-    ...item,
+    const programName = String(
+      item.program_name || ''
+    ).toLowerCase();
 
-    // Use a unique ID so React can distinguish records.
+    return (
+      item.calamity_id != null ||
+      type.includes('calamity') ||
+      programName.includes('calamity') ||
+      item.risk_level != null ||
+      item.house_type != null ||
+      item.roof_damage != null ||
+      item.wall_damage != null ||
+      item.flooding_level != null ||
+      item.damage_risk != null
+    );
+  };
+
+  // Keep only regular beneficiary records.
+  const regularRecords = history
+    .filter((item) => !isCalamityRecord(item))
+    .map((item) => ({
+      ...item,
+      record_type: 'Regular',
+      validation_id:
+        item.validation_id ||
+        `regular-${item.household_id}-${item.program_name}`,
+      validation_status:
+        item.validation_status || item.status || 'Pending',
+    }));
+
+  // Remove duplicate calamity records using calamity_id.
+  const uniqueCalamityRecords = Array.from(
+    new Map(
+      calamityHistory.map((item, index) => [
+        item.calamity_id || `calamity-${item.household_id}-${index}`,
+        item,
+      ])
+    ).values()
+  );
+
+  const calamityRecords = uniqueCalamityRecords.map((item) => ({
+    ...item,
     validation_id: `calamity-${item.calamity_id}`,
-
-    // Normalize calamity fields to match regular beneficiary fields.
     validation_status: item.status || 'Approved',
-
     record_type: 'Calamity',
 
     remarks:
@@ -129,13 +167,12 @@ const combinedHistory = useMemo(() => {
         ? `Calamity assistance - Risk Level: ${item.risk_level}`
         : 'Calamity assistance'),
 
-    description: item.description || 'Calamity assistance',
+    description:
+      item.description || 'Calamity assistance',
   }));
 
   return [...regularRecords, ...calamityRecords];
 }, [history, calamityHistory]);
-
-
   // ============================================================
   // FILTER
   // ============================================================
@@ -416,7 +453,7 @@ const rejectedCount = combinedHistory.filter(
         <div className="rounded-xl border border-red-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-2xl ont-medium text-gray-500">
+              <p className="text-2xl font-medium text-gray-500">
                 Rejected
               </p>
 
