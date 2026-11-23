@@ -73,50 +73,30 @@ async function safeLogActivity(
 | GET /calamity
 |--------------------------------------------------------------------------
 */
+
 router.get('/', async (req, res) => {
   try {
-    const {
-      status,
-      purok,
-      q,
-    } = req.query;
+    const { status, purok, q } = req.query;
 
     const where = [];
     const params = [];
 
-    /*
-     * STATUS FILTER
-     */
     if (status) {
       params.push(status);
-
-      where.push(
-        `c.status = $${params.length}`
-      );
+      where.push(`c.status = $${params.length}`);
     }
 
-    /*
-     * PUROK FILTER
-     */
     if (purok) {
       params.push(purok);
-
-      where.push(
-        `c.purok = $${params.length}`
-      );
+      where.push(`h.purok = $${params.length}`);
     }
 
-    /*
-     * SEARCH FILTER
-     */
     if (q) {
       params.push(`%${q}%`);
-
       where.push(`
         (
-          c.household_name ILIKE $${params.length}
-          OR c.calamity_program ILIKE $${params.length}
-          OR h.household_head_name ILIKE $${params.length}
+          h.household_head_name ILIKE $${params.length}
+          OR p.program_name ILIKE $${params.length}
         )
       `);
     }
@@ -125,6 +105,9 @@ router.get('/', async (req, res) => {
       SELECT
         c.*,
         h.household_head_name,
+        h.purok,
+        h.address,
+        p.program_name,
         u.full_name AS approved_by_name
 
       FROM calamity_programs c
@@ -132,39 +115,33 @@ router.get('/', async (req, res) => {
       LEFT JOIN households h
         ON h.household_id = c.household_id
 
+      LEFT JOIN assistance_programs p
+        ON p.program_id = c.program_id
+
       LEFT JOIN users u
         ON u.user_id = c.approved_by
 
-      ${
-        where.length
-          ? `WHERE ${where.join(' AND ')}`
-          : ''
-      }
+      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
 
       ORDER BY c.created_at DESC
     `;
 
-    const rows = await query(
-      sql,
-      params
-    );
+    const rows = await query(sql, params);
 
     return res.json({
       calamityPrograms: rows,
     });
+
   } catch (error) {
-    console.error(
-      'GET calamity programs ERROR:',
-      error
-    );
+    console.error('GET calamity programs ERROR:', error);
 
     return res.status(500).json({
-      error:
-        error.message ||
-        'Failed to load calamity programs.',
+      error: error.message || 'Failed to load calamity programs.',
+      code: error.code || null,
     });
   }
 });
+
 
 /*
 |--------------------------------------------------------------------------
