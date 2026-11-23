@@ -867,333 +867,80 @@ router.get(
 // /validation/calamity-programs/:id/decision
 // ==================================================
 
+
 router.patch(
   '/calamity-programs/:id/decision',
   requireRole('captain'),
   async (req, res) => {
     try {
-      const {
-        decision,
-        remarks,
-      } = req.body || {};
+      const { decision, remarks } = req.body || {};
 
-      // ------------------------------------------------
-      // VALIDATE DECISION
-      // ------------------------------------------------
-
-      if (
-        !['Approved', 'Rejected'].includes(
-          decision
-        )
-      ) {
+      // Validate decision
+      if (!['Approved', 'Rejected'].includes(decision)) {
         return res.status(400).json({
-          error:
-            'Decision must be Approved or Rejected.',
+          error: 'Decision must be Approved or Rejected.',
         });
       }
 
-      const cleanRemarks =
-        String(remarks || '').trim();
+      const cleanRemarks = String(remarks || '').trim();
 
-      if (
-        decision === 'Rejected' &&
-        !cleanRemarks
-      ) {
+      if (decision === 'Rejected' && !cleanRemarks) {
         return res.status(400).json({
-          error:
-            'Please provide a reason for returning this calamity request.',
+          error: 'Please provide a reason for returning this calamity request.',
         });
       }
 
-      // ------------------------------------------------
-      // GET CAPTAIN UUID
-      // ------------------------------------------------
+      // Get Captain ID
+      const captainId = getAuthenticatedUserId(req);
 
-      const approvedBy =
-        getAuthenticatedUserId(req);
-
-      if (!approvedBy) {
+      if (!captainId) {
         return res.status(401).json({
-          error:
-            'Unable to identify the Captain account.',
+          error: 'Unable to identify the Captain account.',
         });
       }
 
-      // ------------------------------------------------
-      // GET CALAMITY REQUEST
-      // ------------------------------------------------
-
-      const existing = await query(
-        `
-        SELECT
-          cp.calamity_id,
-          cp.household_id,
-          cp.program_id,
-          cp.status,
-          cp.house_type,
-          cp.roof_damage,
-          cp.wall_damage,
-          cp.flooding_level,
-          cp.damage_risk,
-          cp.risk_level,
-          cp.created_at,
-
-          h.household_head_name,
-          h.purok,
-          h.monthly_income,
-          h.family_number,
-
-          p.program_name
-
-        FROM calamity_programs cp
-
-        INNER JOIN households h
-          ON h.household_id = cp.household_id
-
-        LEFT JOIN assistance_programs p
-          ON p.program_id = cp.program_id
-
-        WHERE cp.calamity_id = $1::uuid
-        `,
-        [req.params.id]
-      );
-
-      if (!existing[0]) {
-        return res.status(404).json({
-          error:
-            'Calamity assistance request not found.',
-        });
-      }
-
-      const calamity = existing[0];
-
-      // ------------------------------------------------
-      // ONLY PENDING CAN BE PROCESSED
-      // ------------------------------------------------
-
-      if (calamity.status !== 'Pending') {
-        return res.status(409).json({
-          error:
-            `This calamity request has already been ` +
-            `${String(calamity.status).toLowerCase()}.`,
-        });
-      }
-
-      // ==================================================
-      // APPROVE CALAMITY
-      // ==================================================
-
-      if (decision === 'Approved') {
-        const updated = await query(
-          `
-          UPDATE calamity_programs
-          SET
-            status = 'Approved',
-            approved_by = $1::uuid,
-            approved_at = NOW(),
-            rejection_reason = NULL
-
-          WHERE calamity_id = $2::uuid
-            AND status = 'Pending'
-
-          RETURNING *
-          `,
-          [
-            approvedBy,
-            req.params.id,
-          ]
-        );
-
-        if (!updated[0]) {
-          return res.status(409).json({
-            error:
-              'Calamity request was not found or has already been processed.',
-          });
-        }
-
-        // ----------------------------------------------
-        // ADD TO DISTRIBUTION
-        // ----------------------------------------------
-
-        try {
-          await query(
-            `
-            INSERT INTO ml_assistance_distribution (
-              household_id,
-              program_id,
-              status,
-              approved_by,
-              approved_at
-            )
-            VALUES (
-              $1::uuid,
-              $2::uuid,
-              'Approved',
-              $3::uuid,
-              NOW()
-            )
-            ON CONFLICT DO NOTHING
-            `,
-            [
-              calamity.household_id,
-              calamity.program_id,
-              approvedBy,
-            ]
-          );
-        } catch (distributionError) {
-          console.error(
-            'Calamity distribution insert failed:',
-            distributionError
-          );
-        }
-
-        // ----------------------------------------------
-        // NOTIFY STAFF
-        // ----------------------------------------------
-
-        await safeNotifyRole({
-          role: 'staff',
-          title: 'Calamity Assistance Approved',
-          message:
-            `The calamity assistance request for ` +
-            `"${calamity.household_head_name}" ` +
-            `has been approved by the Captain.`,
-          type: 'calamity_approved',
-          referenceId:
-            calamity.calamity_id,
-        });
-
-        // ----------------------------------------------
-        // NOTIFY ADMIN
-        // ----------------------------------------------
-
-        await safeNotifyRole({
-          role: 'admin',
-          title: 'Calamity Assistance Approved',
-          message:
-            `The calamity assistance request for ` +
-            `"${calamity.household_head_name}" ` +
-            `has been approved by the Captain.`,
-          type: 'calamity_approved',
-          referenceId:
-            calamity.calamity_id,
-        });
-
-        // ----------------------------------------------
-        // ACTIVITY LOG
-        // ----------------------------------------------
-
-        await safeLogActivity(
-          req,
-          'APPROVE_CALAMITY_PROGRAM',
-          `Approved calamity assistance request for ` +
-            `"${calamity.household_head_name}" ` +
-            `under "${calamity.program_name || 'Calamity Assistance'}".`
-        );
-
-        return res.status(200).json({
-          success: true,
-          message:
-            'Calamity assistance approved successfully.',
-          calamityProgram: updated[0],
-        });
-      }
-
-      // ==================================================
-      // REJECT / RETURN CALAMITY
-      // ==================================================
-
+      // Update ONLY calamity_programs
       const updated = await query(
         `
-        UPDATE calamity_programs
-        SET
-          status = 'Rejected',
-          approved_by = $1::uuid,
-          approved_at = NOW(),
-          rejection_reason = $2
-
-        WHERE calamity_id = $3::uuid
-          AND status = 'Pending'
-
-        RETURNING *
+          UPDATE calamity_programs
+          SET
+            status = $1,
+            approved_by = $2::uuid,
+            approved_at = $3,
+            rejection_reason = $4
+          WHERE calamity_id = $5::uuid
+            AND status = 'Pending'
+          RETURNING *
         `,
         [
-          approvedBy,
-          cleanRemarks,
+          decision,
+          decision === 'Approved' ? captainId : null,
+          decision === 'Approved' ? new Date() : null,
+          decision === 'Rejected' ? cleanRemarks : null,
           req.params.id,
         ]
       );
 
       if (!updated[0]) {
-        return res.status(409).json({
-          error:
-            'Calamity request was not found or has already been processed.',
+        return res.status(404).json({
+          error: 'Calamity request was not found or has already been processed.',
         });
       }
-
-      // ----------------------------------------------
-      // NOTIFY STAFF
-      // ----------------------------------------------
-
-      await safeNotifyRole({
-        role: 'staff',
-        title: 'Calamity Assistance Rejected',
-        message:
-          `The calamity assistance request for ` +
-          `"${calamity.household_head_name}" ` +
-          `has been rejected by the Captain. ` +
-          `Reason: ${cleanRemarks}`,
-        type: 'calamity_rejected',
-        referenceId:
-          calamity.calamity_id,
-      });
-
-      // ----------------------------------------------
-      // NOTIFY ADMIN
-      // ----------------------------------------------
-
-      await safeNotifyRole({
-        role: 'admin',
-        title: 'Calamity Assistance Rejected',
-        message:
-          `The calamity assistance request for ` +
-          `"${calamity.household_head_name}" ` +
-          `has been rejected by the Captain. ` +
-          `Reason: ${cleanRemarks}`,
-        type: 'calamity_rejected',
-        referenceId:
-          calamity.calamity_id,
-      });
-
-      // ----------------------------------------------
-      // ACTIVITY LOG
-      // ----------------------------------------------
-
-      await safeLogActivity(
-        req,
-        'REJECT_CALAMITY_PROGRAM',
-        `Returned calamity assistance request for ` +
-          `"${calamity.household_head_name}" ` +
-          `under "${calamity.program_name || 'Calamity Assistance'}". ` +
-          `Reason: ${cleanRemarks}`
-      );
 
       return res.status(200).json({
         success: true,
         message:
-          'Calamity assistance returned successfully.',
+          decision === 'Approved'
+            ? 'Calamity assistance approved successfully.'
+            : 'Calamity assistance returned successfully.',
         calamityProgram: updated[0],
       });
+
     } catch (error) {
-      console.error(
-        'CALAMITY CAPTAIN DECISION ERROR:',
-        error
-      );
+      console.error('CALAMITY CAPTAIN DECISION ERROR:', error);
 
       return res.status(500).json({
-        error:
-          error.message ||
-          'Failed to save calamity decision.',
+        error: error.message || 'Failed to save calamity decision.',
         code: error.code || null,
         detail: error.detail || null,
         hint: error.hint || null,
@@ -1201,5 +948,6 @@ router.patch(
     }
   }
 );
+
 
 module.exports = router;
