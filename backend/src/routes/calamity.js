@@ -379,6 +379,7 @@ router.get(
 | STAFF / ADMIN ONLY
 |--------------------------------------------------------------------------
 */
+
 router.post(
   '/',
   requireRole('admin', 'staff'),
@@ -386,8 +387,7 @@ router.post(
     try {
       const {
         household_id,
-        household_name,
-        purok,
+        program_id,
         calamity_program,
         house_type,
         roof_damage,
@@ -397,173 +397,139 @@ router.post(
         risk_level,
       } = req.body || {};
 
-      /*
-       * VALIDATE HOUSEHOLD
-       */
       if (!household_id) {
         return res.status(400).json({
-          error:
-            'household_id is required.',
+          error: 'household_id is required.',
         });
       }
 
-      /*
-       * VALIDATE PROGRAM
-       */
-      if (!calamity_program) {
+      if (!program_id && !calamity_program) {
         return res.status(400).json({
-          error:
-            'Please select a calamity assistance program.',
+          error: 'Please select a calamity assistance program.',
         });
       }
 
-      /*
-       * GET HOUSEHOLD
-       */
+      // Get household details.
       const householdRows = await query(
         `
-        SELECT
-          household_id,
-          household_head_name,
-          purok
-
-        FROM households
-
-        WHERE household_id = $1::uuid
+          SELECT
+            household_id,
+            household_head_name,
+            purok
+          FROM households
+          WHERE household_id = $1::uuid
         `,
         [household_id]
       );
 
       if (!householdRows[0]) {
         return res.status(404).json({
-          error:
-            'Household not found.',
+          error: 'Household not found.',
         });
       }
 
-      const household =
-        householdRows[0];
+      const household = householdRows[0];
 
-      /*
-       * INSERT REQUEST
-       */
+      // Find the selected assistance program.
+      const programRows = await query(
+        program_id
+          ? `
+              SELECT program_id, program_name
+              FROM assistance_programs
+              WHERE program_id = $1::uuid
+            `
+          : `
+              SELECT program_id, program_name
+              FROM assistance_programs
+              WHERE LOWER(TRIM(program_name)) =
+                    LOWER(TRIM($1))
+            `,
+        [program_id || calamity_program]
+      );
+
+      if (!programRows[0]) {
+        return res.status(404).json({
+          error: 'Selected assistance program was not found.',
+        });
+      }
+
+      const program = programRows[0];
+
+      // Insert using the actual calamity_programs columns.
       const rows = await query(
         `
-        INSERT INTO calamity_programs (
-          household_id,
-          household_name,
-          purok,
-          calamity_program,
-          house_type,
-          roof_damage,
-          wall_damage,
-          flooding_level,
-          damage_risk,
-          risk_level,
-          status
-        )
-
-        VALUES (
-          $1::uuid,
-          $2,
-          $3,
-          $4,
-          $5,
-          $6,
-          $7,
-          $8,
-          $9,
-          $10,
-          'Pending'
-        )
-
-        RETURNING *
+          INSERT INTO calamity_programs (
+            household_id,
+            program_id,
+            house_type,
+            roof_damage,
+            wall_damage,
+            flooding_level,
+            damage_risk,
+            risk_level,
+            status
+          )
+          VALUES (
+            $1::uuid,
+            $2::uuid,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            $8,
+            'Pending'
+          )
+          RETURNING *
         `,
         [
           household_id,
-
-          household_name ||
-            household.household_head_name,
-
-          purok ||
-            household.purok,
-
-          calamity_program,
-
+          program.program_id,
           house_type || null,
-
           roof_damage || null,
-
           wall_damage || null,
-
           flooding_level || null,
-
           Number(damage_risk || 0),
-
           risk_level || 'Low Risk',
         ]
       );
 
-      const calamityProgram =
-        rows[0];
+      const calamityProgram = rows[0];
 
-      /*
-       * NOTIFY CAPTAIN
-       */
+      // Notify Captain after successful submission.
       await safeNotifyRole({
         role: 'captain',
-
-        title:
-          'New Calamity Assistance Approval',
-
+        title: 'New Calamity Assistance Approval',
         message:
           `A new calamity assistance request from ` +
-          `"${calamityProgram.household_name}" ` +
+          `"${household.household_head_name}" ` +
+          `for "${program.program_name}" ` +
           `is waiting for your approval.`,
-
-        type:
-          'calamity_pending',
-
-        referenceId:
-          calamityProgram.calamity_id,
+        type: 'calamity_pending',
+        referenceId: calamityProgram.calamity_id,
       });
 
-      /*
-       * ACTIVITY LOG
-       */
       await safeLogActivity(
         req,
         'CREATE_CALAMITY_PROGRAM',
-
-        `Added household ` +
-          `"${calamityProgram.household_name}" ` +
-          `to "${calamity_program}". ` +
-          `Submitted for Captain approval.`
+        `Added household "${household.household_head_name}" ` +
+          `to "${program.program_name}". Submitted for Captain approval.`
       );
 
       return res.status(201).json({
         success: true,
+        message: 'Calamity assistance request submitted successfully.',
         calamityProgram,
       });
+
     } catch (error) {
-      console.error(
-        'CREATE calamity program ERROR:',
-        error
-      );
+      console.error('CREATE CALAMITY PROGRAM ERROR:', error);
 
       return res.status(500).json({
-        error:
-          error.message ||
-          'Failed to create calamity program.',
-
-        code:
-          error.code || null,
-
-        detail:
-          error.detail || null,
-
-        hint:
-          error.hint || null,
+        error: error.message || 'Failed to create calamity program.',
+        code: error.code || null,
+        detail: error.detail || null,
+        hint: error.hint || null,
       });
     }
   }
