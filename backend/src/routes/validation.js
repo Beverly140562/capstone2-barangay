@@ -869,6 +869,7 @@ router.get(
 
 
 
+
 router.patch(
   '/calamity-programs/:id/decision',
   requireRole('captain'),
@@ -898,14 +899,15 @@ router.patch(
         });
       }
 
-      // Get household and program information for notifications.
+      // Get calamity request details.
+      // The program name comes from assistance_programs.
       const details = await query(
         `
           SELECT
             cp.calamity_id,
             cp.household_id,
+            cp.program_id,
             h.household_head_name,
-            cp.calamity_program,
             p.program_name
           FROM calamity_programs cp
           LEFT JOIN households h
@@ -926,7 +928,7 @@ router.patch(
 
       const calamity = details[0];
 
-      // Update ONLY calamity_programs.
+      // Update ONLY the calamity_programs table.
       const updated = await query(
         `
           UPDATE calamity_programs
@@ -958,11 +960,8 @@ router.patch(
         calamity.household_head_name || 'A household';
 
       const programName =
-        calamity.program_name ||
-        calamity.calamity_program ||
-        'Calamity Assistance';
+        calamity.program_name || 'Calamity Assistance';
 
-      // Prepare notification based on Captain's decision.
       const notification = {
         title:
           decision === 'Approved'
@@ -1015,7 +1014,6 @@ router.patch(
     }
   }
 );
-
 
 
 module.exports = router;
