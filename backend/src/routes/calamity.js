@@ -575,209 +575,61 @@ router.post(
 | PUT /calamity/:id/approve
 |--------------------------------------------------------------------------
 */
+
 router.put(
   '/:id/approve',
   requireRole('captain'),
   async (req, res) => {
     try {
-      const captainId =
-        getAuthenticatedUserId(req);
+      const captainId = getAuthenticatedUserId(req);
 
       if (!captainId) {
         return res.status(401).json({
-          error:
-            'Unable to identify the current Captain.',
+          error: 'Unable to identify the current Captain.',
         });
       }
 
-      /*
-       * GET REQUEST BEFORE UPDATE
-       */
-      const existing = await query(
-        `
-        SELECT
-          cp.*,
-          h.household_head_name,
-          p.program_name
-
-        FROM calamity_programs cp
-
-        LEFT JOIN households h
-          ON h.household_id = cp.household_id
-
-        LEFT JOIN assistance_programs p
-          ON p.program_id = cp.program_id
-
-        WHERE cp.calamity_id = $1::uuid
-          AND cp.status = 'Pending'
-        `,
-        [req.params.id]
-      );
-
-      if (!existing[0]) {
-        return res.status(404).json({
-          error:
-            'Calamity request not found or has already been processed.',
-        });
-      }
-
-      const calamity =
-        existing[0];
-
-      /*
-       * UPDATE
-       */
+      // Update ONLY calamity_programs
       const rows = await query(
         `
-        UPDATE calamity_programs
-
-        SET
-          status = 'Approved',
-          approved_by = $1::uuid,
-          approved_at = NOW(),
-          rejection_reason = NULL
-
-        WHERE calamity_id = $2::uuid
-          AND status = 'Pending'
-
-        RETURNING *
+          UPDATE calamity_programs
+          SET
+            status = 'Approved',
+            approved_by = $1::uuid,
+            approved_at = NOW(),
+            rejection_reason = NULL
+          WHERE calamity_id = $2::uuid
+            AND status = 'Pending'
+          RETURNING *
         `,
-        [
-          captainId,
-          req.params.id,
-        ]
+        [captainId, req.params.id]
       );
 
       if (!rows[0]) {
-        return res.status(409).json({
-          error:
-            'Calamity request was not found or has already been processed.',
+        return res.status(404).json({
+          error: 'Calamity request not found or has already been processed.',
         });
       }
 
-      /*
-       * ADD TO DISTRIBUTION
-       */
-      try {
-        await query(
-          `
-          INSERT INTO ml_assistance_distribution (
-            household_id,
-            program_id,
-            status,
-            approved_by,
-            approved_at
-          )
-
-          VALUES (
-            $1::uuid,
-            $2::uuid,
-            'Approved',
-            $3::uuid,
-            NOW()
-          )
-
-          ON CONFLICT DO NOTHING
-          `,
-          [
-            calamity.household_id,
-            calamity.program_id,
-            captainId,
-          ]
-        );
-      } catch (distributionError) {
-        console.error(
-          'Calamity distribution insert failed:',
-          distributionError
-        );
-      }
-
-      /*
-       * NOTIFY STAFF
-       */
-      await safeNotifyRole({
-        role: 'staff',
-
-        title:
-          'Calamity Assistance Approved',
-
-        message:
-          `The calamity assistance request for ` +
-          `"${calamity.household_head_name || calamity.household_name}" ` +
-          `has been approved by the Captain.`,
-
-        type:
-          'calamity_approved',
-
-        referenceId:
-          calamity.calamity_id,
-      });
-
-      /*
-       * NOTIFY ADMIN
-       */
-      await safeNotifyRole({
-        role: 'admin',
-
-        title:
-          'Calamity Assistance Approved',
-
-        message:
-          `The calamity assistance request for ` +
-          `"${calamity.household_head_name || calamity.household_name}" ` +
-          `has been approved by the Captain.`,
-
-        type:
-          'calamity_approved',
-
-        referenceId:
-          calamity.calamity_id,
-      });
-
-      /*
-       * ACTIVITY LOG
-       */
-      await safeLogActivity(
-        req,
-        'APPROVE_CALAMITY_PROGRAM',
-
-        `Approved calamity assistance request ` +
-          `for "${calamity.household_head_name || calamity.household_name}" ` +
-          `under "${calamity.program_name || calamity.calamity_program || 'Calamity Assistance'}".`
-      );
-
       return res.json({
         success: true,
-
-        message:
-          'Calamity assistance approved.',
-
-        calamityProgram:
-          rows[0],
+        message: 'Calamity assistance approved.',
+        calamityProgram: rows[0],
       });
+
     } catch (error) {
-      console.error(
-        'APPROVE calamity program ERROR:',
-        error
-      );
+      console.error('APPROVE calamity program ERROR:', error);
 
       return res.status(500).json({
-        error:
-          error.message ||
-          'Failed to approve calamity program.',
-
-        code:
-          error.code || null,
-
-        detail:
-          error.detail || null,
-
-        hint:
-          error.hint || null,
+        error: error.message || 'Failed to approve calamity program.',
+        code: error.code || null,
+        detail: error.detail || null,
+        hint: error.hint || null,
       });
     }
   }
 );
+
 
 /*
 |--------------------------------------------------------------------------
@@ -785,191 +637,62 @@ router.put(
 | PUT /calamity/:id/reject
 |--------------------------------------------------------------------------
 */
+
 router.put(
   '/:id/reject',
   requireRole('captain'),
   async (req, res) => {
     try {
-      const {
-        rejection_reason,
-      } = req.body || {};
-
-      const cleanReason =
-        String(
-          rejection_reason || ''
-        ).trim();
+      const cleanReason = String(
+        req.body?.rejection_reason || ''
+      ).trim();
 
       if (!cleanReason) {
         return res.status(400).json({
-          error:
-            'Rejection reason is required.',
+          error: 'Rejection reason is required.',
         });
       }
 
-      const captainId =
-        getAuthenticatedUserId(req);
-
-      if (!captainId) {
-        return res.status(401).json({
-          error:
-            'Unable to identify the current Captain.',
-        });
-      }
-
-      /*
-       * GET REQUEST BEFORE UPDATE
-       */
-      const existing = await query(
-        `
-        SELECT
-          cp.*,
-          h.household_head_name,
-          p.program_name
-
-        FROM calamity_programs cp
-
-        LEFT JOIN households h
-          ON h.household_id = cp.household_id
-
-        LEFT JOIN assistance_programs p
-          ON p.program_id = cp.program_id
-
-        WHERE cp.calamity_id = $1::uuid
-          AND cp.status = 'Pending'
-        `,
-        [req.params.id]
-      );
-
-      if (!existing[0]) {
-        return res.status(404).json({
-          error:
-            'Calamity request not found or has already been processed.',
-        });
-      }
-
-      const calamity =
-        existing[0];
-
-      /*
-       * UPDATE
-       */
+      // Update ONLY calamity_programs
       const rows = await query(
         `
-        UPDATE calamity_programs
-
-        SET
-          status = 'Rejected',
-          approved_by = $1::uuid,
-          approved_at = NOW(),
-          rejection_reason = $2
-
-        WHERE calamity_id = $3::uuid
-          AND status = 'Pending'
-
-        RETURNING *
+          UPDATE calamity_programs
+          SET
+            status = 'Rejected',
+            approved_by = NULL,
+            approved_at = NULL,
+            rejection_reason = $1
+          WHERE calamity_id = $2::uuid
+            AND status = 'Pending'
+          RETURNING *
         `,
-        [
-          captainId,
-          cleanReason,
-          req.params.id,
-        ]
+        [cleanReason, req.params.id]
       );
 
       if (!rows[0]) {
-        return res.status(409).json({
-          error:
-            'Calamity request was not found or has already been processed.',
+        return res.status(404).json({
+          error: 'Calamity request not found or has already been processed.',
         });
       }
 
-      /*
-       * NOTIFY STAFF
-       */
-      await safeNotifyRole({
-        role: 'staff',
-
-        title:
-          'Calamity Assistance Rejected',
-
-        message:
-          `The calamity assistance request for ` +
-          `"${calamity.household_head_name || calamity.household_name}" ` +
-          `has been rejected by the Captain. ` +
-          `Reason: ${cleanReason}`,
-
-        type:
-          'calamity_rejected',
-
-        referenceId:
-          calamity.calamity_id,
-      });
-
-      /*
-       * NOTIFY ADMIN
-       */
-      await safeNotifyRole({
-        role: 'admin',
-
-        title:
-          'Calamity Assistance Rejected',
-
-        message:
-          `The calamity assistance request for ` +
-          `"${calamity.household_head_name || calamity.household_name}" ` +
-          `has been rejected by the Captain. ` +
-          `Reason: ${cleanReason}`,
-
-        type:
-          'calamity_rejected',
-
-        referenceId:
-          calamity.calamity_id,
-      });
-
-      /*
-       * ACTIVITY LOG
-       */
-      await safeLogActivity(
-        req,
-        'REJECT_CALAMITY_PROGRAM',
-
-        `Rejected calamity assistance request ` +
-          `for "${calamity.household_head_name || calamity.household_name}" ` +
-          `under "${calamity.program_name || calamity.calamity_program || 'Calamity Assistance'}". ` +
-          `Reason: ${cleanReason}`
-      );
-
       return res.json({
         success: true,
-
-        message:
-          'Calamity assistance rejected.',
-
-        calamityProgram:
-          rows[0],
+        message: 'Calamity assistance rejected.',
+        calamityProgram: rows[0],
       });
+
     } catch (error) {
-      console.error(
-        'REJECT calamity program ERROR:',
-        error
-      );
+      console.error('REJECT calamity program ERROR:', error);
 
       return res.status(500).json({
-        error:
-          error.message ||
-          'Failed to reject calamity program.',
-
-        code:
-          error.code || null,
-
-        detail:
-          error.detail || null,
-
-        hint:
-          error.hint || null,
+        error: error.message || 'Failed to reject calamity program.',
+        code: error.code || null,
+        detail: error.detail || null,
+        hint: error.hint || null,
       });
     }
   }
 );
+
 
 module.exports = router;

@@ -617,47 +617,48 @@ RETURNING *
        * Insert a new one and let the unique index prevent
        * duplicate records if two requests race.
        */
-      const insertResult = await query(
-  `
-  INSERT INTO ml_assistance_distribution (
-    household_id,
-    program_id,
-    amount_released,
-    status,
-    release_status,
-    release_date,
-    period_start,
-    period_end
-  )
-  SELECT DISTINCT
-    bv.household_id,
-    bv.program_id,
-    CAST(NULL AS NUMERIC),
-    CAST('Approved' AS VARCHAR),
-    CAST('Not Released' AS VARCHAR),
-    CAST(NULL AS DATE),
-    CAST($2 AS DATE),
-    CAST($3 AS DATE)
-  FROM beneficiary_validation bv
-  INNER JOIN households h
-    ON h.household_id = bv.household_id
-  WHERE bv.program_id = $1::uuid
-    AND LOWER(TRIM(bv.validation_status)) = 'approved'
-    AND bv.approved_by IS NOT NULL
-    AND bv.approved_at IS NOT NULL
-  ON CONFLICT (
-    household_id,
-    program_id,
-    period_start,
-    period_end
-  )
-  WHERE period_start IS NOT NULL
-    AND period_end IS NOT NULL
-  DO NOTHING
-  RETURNING distribution_id
-  `,
-  [program_id, period_start, period_end]
-);
+     
+           const insertResult = await query(
+        `
+        INSERT INTO ml_assistance_distribution (
+          household_id,
+          program_id,
+          amount_released,
+          status,
+          release_status,
+          release_date,
+          period_start,
+          period_end
+        )
+        VALUES (
+          $1,
+          $2,
+          $3::numeric,
+          'Approved',
+          'Not Released',
+          NULL,
+          $4::date,
+          $5::date
+        )
+        ON CONFLICT (
+          household_id,
+          program_id,
+          period_start,
+          period_end
+        )
+        WHERE period_start IS NOT NULL
+          AND period_end IS NOT NULL
+        DO NOTHING
+        RETURNING *
+        `,
+        [
+          item.householdId,
+          program_id,
+          item.amount,
+          period_start,
+          period_end,
+        ]
+      );
 
       const insertedRows = getRows(insertResult);
 
@@ -668,64 +669,9 @@ RETURNING *
               item.household.household_head_name || item.householdId
             } in this period. Refresh and try again.`,
           saved,
-        });const insertResult = await query(
-  `
-  INSERT INTO ml_assistance_distribution (
-    household_id,
-    program_id,
-    amount_released,
-    status,
-    release_status,
-    release_date,
-    period_start,
-    period_end
-  )
-  VALUES (
-    $1,
-    $2,
-    $3::numeric,
-    'Approved',
-    'Not Released',
-    NULL,
-    $4::date,
-    $5::date
-  )
-  ON CONFLICT (
-    household_id,
-    program_id,
-    period_start,
-    period_end
-  )
-  WHERE period_start IS NOT NULL
-    AND period_end IS NOT NULL
-  DO NOTHING
-  RETURNING *
-  `,
-  [
-    item.householdId,
-    program_id,
-    item.amount,
-    period_start,
-    period_end,
-  ]
-);
-
-const insertedRows = getRows(insertResult);
-
-if (insertedRows.length === 0) {
-  return res.status(409).json({
-    error:
-      `A distribution already exists for ${
-        item.household.household_head_name || item.householdId
-      } in this period. Refresh and try again.`,
-    saved,
-  });
-}
-
-saved.push(...insertedRows);
+        });
       }
 
-      // Add returned rows once only.
       saved.push(...insertedRows);
     }
 
